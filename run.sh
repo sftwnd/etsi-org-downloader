@@ -1,5 +1,8 @@
 #!/bin/bash
-if [ ! -f "target/ETSI.ORG-1.0-SNAPSHOT-jar-with-dependencies.jar" ]; then
+ETSI_ORG_VERSION=1.0
+ETSI_ORG_JAR="etsiorg-downloader-${ETSI_ORG_VERSION}-jar-with-dependencies.jar"
+LOGBACK_FILE="./src/main/resources/logback.xml"
+if [ ! -f "target/${ETSI_ORG_JAR}" ]; then
   mvn -Dmaven.repo.local=~/.m2 clean package
 fi
-java -Dlogback.configurationFile=./src/main/resources/logback.xml -jar target/ETSI.ORG-1.0-SNAPSHOT-jar-with-dependencies.jar
+java -Dlogback.configurationFile=${LOGBACK_FILE} -jar target/${ETSI_ORG_JAR}

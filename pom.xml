@@ -4,9 +4,28 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>org.example</groupId>
-    <artifactId>ETSI.ORG</artifactId>
-    <version>1.0-SNAPSHOT</version>
+    <groupId>com.github.sftwnd.etsiorg</groupId>
+    <artifactId>etsiorg-downloader</artifactId>
+    <version>1.0</version>
+
+    <name>ETSI.ORG :: Documents :: Downloader</name>
+    <description>Document downloader from ETSI.ORG website</description>
+
+    <developers>
+        <developer>
+            <id>ashindarev</id>
+            <name>Andrey Shindarev</name>
+            <email>ashindarev@gmail.com</email>
+            <timezone>Europe/Moscow</timezone>
+        </developer>
+    </developers>
+
+    <scm>
+        <url>https://github.com/sftwnd/etsi-org-downloader</url>
+        <connection>scm:git:git@github.com:sftwnd/etsi-org-downloader.git</connection>
+        <developerConnection>scm:git:git@github.com:sftwnd/etsi-org-downloader.git</developerConnection>
+        <tag>1.0</tag>
+    </scm>
 
     <properties>
         <maven.compiler.source>11</maven.compiler.source>
