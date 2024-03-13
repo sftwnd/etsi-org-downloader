@@ -1,0 +1,16 @@
+version: "3.8"
+
+services:
+
+  etsiorg:
+    container_name: "etsiorg-downloader"
+    build:
+      context: ./
+    image: sftwnd/etsi-org:1.0
+    hostname: etsiorg-downloader
+    volumes:
+      - ~/.m2:/root/.m2
+      - ./.settings.xml:/root/.m2/settings.xml
+      - ./:/opt/share/etsiorg
+    command:
+      - "/opt/share/etsiorg/run.sh"
