@@ -1,10 +1,9 @@
 package com.github.sftwnd.etsiorg;
 
 import edu.umd.cs.findbugs.annotations.NonNull;
-import edu.umd.cs.findbugs.annotations.Nullable;
+import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.SneakyThrows;
-import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -13,60 +12,59 @@ import java.net.URLConnection;
 import java.nio.charset.Charset;
 import java.nio.file.Path;
 import java.util.Objects;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executor;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
+
+/**
+ * Page process helper
+ */
+@AllArgsConstructor
 @Getter
-@Slf4j
 public class Page {
 
-    private final URI uri;
-    private final String contentType;
-    private final Charset charset;
-    private final byte[] buff;
+    private static final Pattern CONTENT_TYPE_PATTERN = Pattern.compile("^\\s*(\\S+)\\s*(?:;\\s*(\\S+)\\s*=\\s*(\\S+)\\s*)?$");
 
-    private final Pattern CONTENT_TYPE_PATTERN = Pattern.compile("^\\s*(\\S+)\\s*(?:;\\s*(\\S+)\\s*=\\s*(\\S+)\\s*)?$");
-
-    /**
-     * Load and construct File by uri
-     * @param uri URI to file
-     * @throws IOException if an error occurs
-     */
-    public Page(@NonNull URI uri) throws IOException {
-        this.uri = uri;
-        URLConnection connection = Objects.requireNonNull(uri, "Page::new - URI is null")
-                .toURL()
-                .openConnection();
-        String contentType = connection.getContentType();
-        Matcher matcher = CONTENT_TYPE_PATTERN.matcher(contentType);
-        if (matcher.matches()) {
-            this.contentType = matcher.group(1);
-            if ("charset".equalsIgnoreCase(matcher.group(2))) {
-                this.charset = Charset.forName(matcher.group(3));
-            } else {
-                this.charset = null;
-            }
-        } else {
-            this.contentType = contentType;
-            this.charset = null;
-        }
-        this.buff = new byte[connection.getContentLength()];
-        connection.connect();
-        try (InputStream inputStream = connection.getInputStream()) {
-            for (int readed = 0; readed < buff.length; ) {
-                readed += inputStream.read(buff, readed, buff.length - readed);
-            }
-        }
+    @SneakyThrows
+    public static Page of(@NonNull URI uri) {
+        return new Page(Objects.requireNonNull(uri, "Page::of - uri is null"));
     }
 
     /**
-     * Normalized full path to file (including file name) in the URI
+     * Page URI
+     */
+    private URI uri;
+
+    /**
+     * Page content type
+     */
+    private String contentType;
+
+
+    /**
+     * Page content length
+     */
+    private int contentLength;
+
+
+    /**
+     * Page character set
+     */
+    private Charset charset;
+
+
+    /**
+     * Page data stream
+     */
+    private InputStream inputStream;
+
+    /**
+     * Full path to file (including file name) in the URI
      * @return Normalized full path to file (including file name)
      */
     public Path path() {
-        return Path.of(uri.getPath()).normalize();
+        return Path.of(uri.getPath());
     }
 
     /**
@@ -78,27 +76,36 @@ public class Page {
     }
 
     /**
-     * Load the page synchronously
-     * @param uri URI fo file
-     * @return loaded file
+     * Check that path is child of URI
      */
-    @SneakyThrows
-    private static Page load(@NonNull URI uri) {
-        Page page = new Page(uri);
-        logger.trace("Loaded page: {}", uri.getPath());
-        return page;
+    public boolean checkPath(@NonNull Path path) {
+        return !path().normalize().startsWith(path.normalize());
     }
 
     /**
-     * Start to load file asynchronously
+     * Connect to URI resource and load resource properties
      * @param uri URI to file
-     * @return CompletableFuture for the file load
+     * @throws IOException if an error occurs
      */
-    public static CompletableFuture<Page> loadAsync(@NonNull URI uri, @Nullable Executor executor) {
-        logger.trace("Start to load async: {}", uri.getPath());
-        return executor == null
-                ? CompletableFuture.supplyAsync(() -> load(uri))
-                : CompletableFuture.supplyAsync(() -> load(uri), executor);
+    private Page(@NonNull URI uri) throws IOException {
+        URLConnection connection = Objects.requireNonNull(uri, "Loader::new - URI is null")
+                .toURL()
+                .openConnection();
+        this.uri = uri;
+        this.inputStream = connection.getInputStream();
+        this.contentLength = connection.getContentLength();
+        Matcher matcher = CONTENT_TYPE_PATTERN.matcher(connection.getContentType());
+        if (matcher.matches()) {
+            this.contentType = matcher.group(1);
+            if ("charset".equalsIgnoreCase(matcher.group(2))) {
+                this.charset = Charset.forName(matcher.group(3));
+            } else {
+                this.charset = UTF_8;
+            }
+        } else {
+            this.contentType = connection.getContentType();
+            this.charset = UTF_8;
+        }
     }
 
     /**
@@ -107,8 +114,9 @@ public class Page {
      */
     @Override
     public String toString() {
-        return "Path [path: '" + path() + '\'' +
-                ", length: " + buff.length +
+        return "Path [root: '" + getUri().resolve("/").normalize() + '\'' +
+                ", path: '" + path() + '\'' +
+                ", contentLength: " + getContentLength() +
                 ", contentType: '" + contentType + '\'' +
                 ", fileName: '" + fileName() + '\'' +
                 ( charset == null ? "" : ", charset: '" + charset + '\'' ) +
