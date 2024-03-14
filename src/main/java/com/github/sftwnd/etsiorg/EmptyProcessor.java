@@ -16,6 +16,10 @@ public class EmptyProcessor implements Processor<CompletableFuture<Stream<Path>>
     private EmptyProcessor() {
     }
 
+    /**
+     * Do nothing processor
+     * @return empty completed future
+     */
     @NonNull
     @Override
     public CompletableFuture<Stream<Path>> process() {

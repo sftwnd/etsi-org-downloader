@@ -30,10 +30,20 @@ public class ComplexProcessorFactory implements ProcessorFactory<CompletableFutu
         this.onExpires = onExpires;
     }
 
+    /**
+     * Instantiate File Save Processor from the page reference
+     * @param page the page reference
+     * @return Processor to load file from the page reference
+     */
     private Processor<CompletableFuture<Stream<Path>>> fileSaveProcessor(@NonNull Page page) {
         return new FileSaveProcessor(root, page);
     }
 
+    /**
+     * Instantiate text/html Processor from the page reference
+     * @param page the page reference
+     * @return Processor to load text/html, parse and initialize child files loading
+     */
     private Processor<CompletableFuture<Stream<Path>>> textHtmlProcessor(@NonNull Page page) {
         return new TextHtmlProcessor(page, this, executor, onExpires);
     }

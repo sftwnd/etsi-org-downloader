@@ -59,6 +59,10 @@ public class Page {
      */
     private boolean acceptRange = true;
 
+    /**
+     * Request resource creation date
+     * @return date of resource creation
+     */
     public Instant dateTime() {
         return Optional.ofNullable(href.getDateTime())
                 .map(dateTime -> dateTime.atZone(ZoneId.systemDefault()))
@@ -67,6 +71,11 @@ public class Page {
                 .orElse(null);
     }
 
+    /**
+     * Size of file resource if defined in HREF or contentLength from HTTP Connection
+     * @return file resource size
+     * @throws IOException in the case of error
+     */
     public long contentLength() throws IOException {
         if (this.contentLength != null) {
             return this.contentLength;
@@ -77,6 +86,11 @@ public class Page {
         return this.contentLength;
     }
 
+    /**
+     * InputStream of resource if connected
+     * @return actual resource stream
+     * @throws IOException in the case of error
+     */
     public InputStream inputStream() throws IOException {
         connect(0L);
         return this.inputStream;

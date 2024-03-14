@@ -39,6 +39,13 @@ public class TextHtmlProcessor implements Processor<CompletableFuture<Stream<Pat
     private final Executor executor;
     private final Consumer<Collection<Path>> onExpires;
 
+    /**
+     * Constructor of Text Html Processor
+     * @param page text/html reference
+     * @param processorFactory factory for processor resource
+     * @param executor executor for the async execution
+     * @param onExpires listener for the expired resources
+     */
     TextHtmlProcessor(@NonNull Page page,
                       @NonNull ProcessorFactory<CompletableFuture<Stream<Path>>> processorFactory,
                       @Nullable Executor executor,
@@ -181,7 +188,6 @@ public class TextHtmlProcessor implements Processor<CompletableFuture<Stream<Pat
         }
         return hrefs.stream();
     }
-
 
     /**
      * Load text/html file to String

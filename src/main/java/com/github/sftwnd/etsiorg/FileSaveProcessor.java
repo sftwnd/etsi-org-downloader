@@ -42,6 +42,10 @@ public class FileSaveProcessor implements Processor<CompletableFuture<Stream<Pat
         this.page = Objects.requireNonNull(page, "FileSaveProcessor::new - page is null");
     }
 
+    /**
+     * Save file and return completion future (in the caller thread)
+     * @return Completed future with list with one path to the loaded file
+     */
     @NonNull
     @Override
     public CompletableFuture<Stream<Path>> process() {
