@@ -27,14 +27,14 @@ public class Page {
     private static final Pattern CONTENT_TYPE_PATTERN = Pattern.compile("^\\s*(\\S+)\\s*(?:;\\s*(\\S+)\\s*=\\s*(\\S+)\\s*)?$");
 
     @SneakyThrows
-    public static Page of(@NonNull URI uri) {
-        return new Page(Objects.requireNonNull(uri, "Page::of - uri is null"));
+    public static Page of(@NonNull HREF href) {
+        return new Page(Objects.requireNonNull(href, "Page::of - href is null"));
     }
 
     /**
      * Page URI
      */
-    private URI uri;
+    private HREF href;
 
     /**
      * Page content type
@@ -64,7 +64,7 @@ public class Page {
      * @return Normalized full path to file (including file name)
      */
     public Path path() {
-        return Path.of(uri.getPath());
+        return href.path();
     }
 
     /**
@@ -72,7 +72,15 @@ public class Page {
      * @return name of file
      */
     public String fileName() {
-        return path().getFileName().toString();
+        return href.name().toString();
+    }
+
+    /**
+     * URI of file
+     * @return uri of file
+     */
+    public URI getUri() {
+        return href.getUri();
     }
 
     /**
@@ -84,14 +92,15 @@ public class Page {
 
     /**
      * Connect to URI resource and load resource properties
-     * @param uri URI to file
+     * @param href file resource reference
      * @throws IOException if an error occurs
      */
-    private Page(@NonNull URI uri) throws IOException {
-        URLConnection connection = Objects.requireNonNull(uri, "Loader::new - URI is null")
+    private Page(@NonNull HREF href) throws IOException {
+        URLConnection connection = Objects.requireNonNull(href, "Loader::new - URI is null")
+                .getUri()
                 .toURL()
                 .openConnection();
-        this.uri = uri;
+        this.href = href;
         this.inputStream = connection.getInputStream();
         this.contentLength = connection.getContentLength();
         Matcher matcher = CONTENT_TYPE_PATTERN.matcher(connection.getContentType());
@@ -114,7 +123,7 @@ public class Page {
      */
     @Override
     public String toString() {
-        return "Path [root: '" + getUri().resolve("/").normalize() + '\'' +
+        return "Path [ " + href +
                 ", path: '" + path() + '\'' +
                 ", contentLength: " + getContentLength() +
                 ", contentType: '" + contentType + '\'' +

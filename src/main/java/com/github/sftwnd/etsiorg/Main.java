@@ -16,12 +16,12 @@ import java.util.stream.Stream;
 @Slf4j
 public class Main {
 
-    private static final String DEFAULT_URI = "https://www.etsi.org/deliver/";
+    private static final String DEFAULT_URI = // "https://www.etsi.org/deliver/";
         // "https://www.etsi.org/deliver/etsi_ts/129000_129099/";
         // "https://www.etsi.org/deliver/etsi_ts/129000_129099/129013/";
         // "https://www.etsi.org/deliver/etsi_ts/129000_129099/129002/";
         // "https://www.etsi.org/deliver/etsi_ts/129000_129099/129079";
-        // "https://www.etsi.org/deliver/etsi_ts/129000_129099/129079/10.07.00_60";
+       "https://www.etsi.org/deliver/etsi_ts/129000_129099/129079/10.07.00_60";
 
     private static final String URI_PROPERTY = "uri";
     private static final String DEST_PROPERTY = "dest";
@@ -38,7 +38,7 @@ public class Main {
                     .orElse(DEFAULT_URI));
             var processorFactory = new ComplexProcessorFactory(dest, executor);
             processorFactory
-                    .processor(Page.of(uri))
+                    .processor(Page.of(HREF.builder().uri(uri).build()))
                     .process()
                     .thenApply(Stream::sorted)
                     .thenApply(stream -> stream.map(Path::toString))

@@ -49,7 +49,7 @@ public class TextHtmlProcessor implements Processor<CompletableFuture<Stream<Pat
             var result = swap(
                     parseFile(page)
                             .map(uri -> CompletableFuture
-                                    .supplyAsync(() -> Page.of(uri))
+                                    .supplyAsync(() -> Page.of(HREF.builder().uri(uri).build()))
                                     .thenApply(processorFactory::processor)
                                     .thenCompose(Processor::process)));
             logger.trace("Text/html fila has been processed: {}", page.path());
