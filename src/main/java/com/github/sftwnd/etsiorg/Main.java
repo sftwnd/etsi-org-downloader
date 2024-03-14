@@ -21,7 +21,8 @@ public class Main {
         // "https://www.etsi.org/deliver/etsi_ts/129000_129099/129013/";
         // "https://www.etsi.org/deliver/etsi_ts/129000_129099/129002/";
         // "https://www.etsi.org/deliver/etsi_ts/129000_129099/129079";
-       "https://www.etsi.org/deliver/etsi_ts/129000_129099/129079/10.07.00_60";
+       // "https://www.etsi.org/deliver/etsi_ts/129000_129099/129079/10.07.00_60";
+       "https://www.etsi.org/deliver/etsi_ts/129000_129099/129078/17.00.00_60";
 
     private static final String URI_PROPERTY = "uri";
     private static final String DEST_PROPERTY = "dest";

@@ -72,7 +72,7 @@ class HREFTest {
 
     @Test
     void bytesTest() {
-        assertEquals(10, builder().regularFile(true).bytes(10).dateTime(LocalDateTime.now()).build().getBytes());
+        assertEquals(10, builder().regularFile(true).bytes(10L).dateTime(LocalDateTime.now()).build().getBytes());
     }
     @Test
     void negativeBytesTest() {

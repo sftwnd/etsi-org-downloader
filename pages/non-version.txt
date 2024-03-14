@@ -1,0 +1,17 @@
+
+<html><head><title>www.etsi.org - /deliver/etsi_ts/129000_129099/</title></head><body><H1>www.etsi.org - /deliver/etsi_ts/129000_129099/</H1><hr>
+
+<pre><A HREF="/deliver/etsi_ts/">[To Parent Directory]</A>
+<br><br> 9/28/2023  5:55 AM        &lt;dir&gt; <A HREF="/deliver/etsi_ts/129000_129099/129002/">129002</A>
+    <br>  2/3/2000 10:11 AM        &lt;dir&gt; <A HREF="/deliver/etsi_ts/129000_129099/129006/">129006</A>
+    <br>  4/6/2022 12:05 PM        &lt;dir&gt; <A HREF="/deliver/etsi_ts/129000_129099/129007/">129007</A>
+    <br>12/14/2022  2:24 PM        &lt;dir&gt; <A HREF="/deliver/etsi_ts/129000_129099/129010/">129010</A>
+    <br>12/14/2022  2:22 PM        &lt;dir&gt; <A HREF="/deliver/etsi_ts/129000_129099/129011/">129011</A>
+    <br>12/14/2022  2:22 PM        &lt;dir&gt; <A HREF="/deliver/etsi_ts/129000_129099/129013/">129013</A>
+    <br> 4/27/2022  2:05 PM        &lt;dir&gt; <A HREF="/deliver/etsi_ts/129000_129099/129016/">129016</A>
+    <br> 4/27/2022  2:05 PM        &lt;dir&gt; <A HREF="/deliver/etsi_ts/129000_129099/129018/">129018</A>
+    <br> 10/6/2022  1:03 PM        &lt;dir&gt; <A HREF="/deliver/etsi_ts/129000_129099/129060/">129060</A>
+    <br>12/14/2022  2:23 PM        &lt;dir&gt; <A HREF="/deliver/etsi_ts/129000_129099/129061/">129061</A>
+    <br>12/14/2022  2:23 PM        &lt;dir&gt; <A HREF="/deliver/etsi_ts/129000_129099/129078/">129078</A>
+    <br>12/14/2022  2:24 PM        &lt;dir&gt; <A HREF="/deliver/etsi_ts/129000_129099/129079/">129079</A>
+<br></pre><hr></body></html>

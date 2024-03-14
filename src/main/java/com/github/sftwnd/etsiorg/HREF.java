@@ -140,12 +140,12 @@ public class HREF {
             return this;
         }
 
-        public Builder version(long version) {
+        public Builder version(Long version) {
             this.version = version;
             return this;
         }
 
-        public Builder bytes(long bytes) {
+        public Builder bytes(Long bytes) {
             this.bytes = bytes;
             return this;
         }
