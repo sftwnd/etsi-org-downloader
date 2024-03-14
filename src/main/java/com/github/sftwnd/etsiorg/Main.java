@@ -1,5 +1,6 @@
 package com.github.sftwnd.etsiorg;
 
+import edu.umd.cs.findbugs.annotations.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
 import java.net.URI;
@@ -9,6 +10,7 @@ import java.util.Collection;
 import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -37,7 +39,7 @@ public class Main {
             URI uri = new URI(Optional.ofNullable(System.getProperty(URI_PROPERTY))
                     .filter(Predicate.not(String::isBlank))
                     .orElse(DEFAULT_URI));
-            var processorFactory = new ComplexProcessorFactory(dest, executor);
+            var processorFactory = new ComplexProcessorFactory(dest, executor, onExpires(dest));
             processorFactory
                     .processor(Page.of(HREF.builder().uri(uri).build()))
                     .process()
@@ -54,6 +56,12 @@ public class Main {
         } finally {
             executor.shutdown();
         }
+    }
+
+    private static Consumer<Collection<Path>> onExpires(@NonNull Path root) {
+        return expires -> expires.stream().sorted().forEach(
+                expired -> logger.warn("Expired: {}", Path.of(root.toString(), expired.toString()))
+        );
     }
 
 }

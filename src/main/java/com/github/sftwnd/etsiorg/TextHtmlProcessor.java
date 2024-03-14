@@ -17,10 +17,12 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static java.util.regex.Pattern.CASE_INSENSITIVE;
@@ -35,11 +37,16 @@ public class TextHtmlProcessor implements Processor<CompletableFuture<Stream<Pat
     private final Page page;
     private final ProcessorFactory<CompletableFuture<Stream<Path>>> processorFactory;
     private final Executor executor;
+    private final Consumer<Collection<Path>> onExpires;
 
-    TextHtmlProcessor(@NonNull Page page, @NonNull ProcessorFactory<CompletableFuture<Stream<Path>>> processorFactory, @Nullable Executor executor) {
+    TextHtmlProcessor(@NonNull Page page,
+                      @NonNull ProcessorFactory<CompletableFuture<Stream<Path>>> processorFactory,
+                      @Nullable Executor executor,
+                      @Nullable Consumer<Collection<Path>> onExpires) {
         this.page = Objects.requireNonNull(page, "TextHtmlProcessor::new - page is null");
         this.processorFactory = Objects.requireNonNull(processorFactory, "TextHtmlProcessor::new - processorFactory is null");
         this.executor = executor;
+        this.onExpires = onExpires;
     }
     /**
      * Process file with content or references recursively to load the tree of files
@@ -156,9 +163,21 @@ public class TextHtmlProcessor implements Processor<CompletableFuture<Stream<Pat
             (href.isVersioned() ? versionedHrefs : hrefs).add(href);
             logger.trace("Found {}: {}", href.isRegularFile() ? "file" : "path", href);
         }
-        versionedHrefs.stream()
+        HREF actualRef = versionedHrefs.stream()
                 .max(Comparator.comparing(href -> href.name().toString()))
-                .ifPresent(hrefs::add);
+                .orElse(null);
+        if (actualRef != null) {
+            hrefs.add(actualRef);
+            if (this.onExpires != null) {
+                Optional.of(versionedHrefs
+                                .stream()
+                                .filter(Predicate.not(href -> href == actualRef))
+                                .map(HREF::path)
+                                .collect(Collectors.toList()))
+                        .filter(Predicate.not(Collection::isEmpty))
+                        .ifPresent(this.onExpires);
+            }
+        }
         return hrefs.stream();
     }
 

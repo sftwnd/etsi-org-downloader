@@ -6,9 +6,11 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.nio.file.Path;
+import java.util.Collection;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
+import java.util.function.Consumer;
 import java.util.stream.Stream;
 
 /**
@@ -20,10 +22,12 @@ public class ComplexProcessorFactory implements ProcessorFactory<CompletableFutu
 
     private final Path root;
     private final Executor executor;
+    private final Consumer<Collection<Path>> onExpires;
 
-    public ComplexProcessorFactory(@Nullable Path root, @Nullable Executor executor) {
+    public ComplexProcessorFactory(@Nullable Path root, @Nullable Executor executor, @Nullable Consumer<Collection<Path>> onExpires) {
         this.root = Objects.requireNonNull(root, "ComplexProcessorFactory::new - root path is null");
         this.executor = executor;
+        this.onExpires = onExpires;
     }
 
     private Processor<CompletableFuture<Stream<Path>>> fileSaveProcessor(@NonNull Page page) {
@@ -31,7 +35,7 @@ public class ComplexProcessorFactory implements ProcessorFactory<CompletableFutu
     }
 
     private Processor<CompletableFuture<Stream<Path>>> textHtmlProcessor(@NonNull Page page) {
-        return new TextHtmlProcessor(page, this, executor);
+        return new TextHtmlProcessor(page, this, executor, onExpires);
     }
 
     /**
