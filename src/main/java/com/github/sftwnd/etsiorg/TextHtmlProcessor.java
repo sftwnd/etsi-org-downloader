@@ -54,7 +54,7 @@ public class TextHtmlProcessor implements Processor<CompletableFuture<Stream<Pat
      */
     @Override
     public @NonNull CompletableFuture<Stream<Path>> process() {
-        logger.debug("Start text/html process: {}", page.path());
+        logger.debug("Start text/html process: '{}'", page.path());
         try {
             var result = swap(
                     parseFile(page)
@@ -62,10 +62,10 @@ public class TextHtmlProcessor implements Processor<CompletableFuture<Stream<Pat
                                     .supplyAsync(() -> Page.of(href))
                                     .thenApply(processorFactory::processor)
                                     .thenCompose(Processor::process)));
-            logger.trace("Text/html fila has been processed: {}", page.path());
+            logger.trace("Text/html page has been processed: '{}'", page.path());
             return result;
         } catch (IOException ioex) {
-            logger.error("Unable to process text/html file: {} by cause: {}", page.path(), ioex.getLocalizedMessage());
+            logger.error("Unable to process text/html page: '{}'. Cause[{}]: {}", page.path(), ioex.getClass().getSimpleName(), ioex.getMessage());
             return CompletableFuture.completedFuture(Stream.empty());
         }
     }
@@ -131,7 +131,7 @@ public class TextHtmlProcessor implements Processor<CompletableFuture<Stream<Pat
 
      */
     private static final Pattern REF_PATTERN = Pattern.compile(
-            "<br>\\s+(\\d+)/(\\d+)/(\\d+)\\s+(\\d+):(\\d+)\\s+(.)M\\s+(?:(\\d+)|\\S+(dir)\\S+)\\s+<a\\s+.*?href\\s*=\\s*\"(.*?)\".*?>(.*?)</a>",
+            "<br>\\s*(\\d+)/(\\d+)/(\\d+)\\s+(\\d+):(\\d+)\\s+(.)M\\s+(?:(\\d+)|\\S+(dir)\\S+)\\s+<a\\s+.*?href\\s*=\\s*\"(.*?)\".*?>(.*?)</a>",
             CASE_INSENSITIVE);
 
     /**
@@ -168,6 +168,7 @@ public class TextHtmlProcessor implements Processor<CompletableFuture<Stream<Pat
                 .orElse(null);
         if (actualRef != null) {
             hrefs.add(actualRef);
+            logger.info("Found actual version: '{}'", actualRef.path());
             if (this.onExpires != null) {
                 Optional.of(versionedHrefs
                                 .stream()
@@ -189,7 +190,7 @@ public class TextHtmlProcessor implements Processor<CompletableFuture<Stream<Pat
      * @throws IOException in the case of error
      */
     private @NonNull String loadFile(@NonNull Page page) throws IOException {
-        byte[] buff = new byte[page.contentLength()];
+        byte[] buff = new byte[Long.valueOf(page.contentLength()).intValue()];
         try (InputStream inputStream = page.inputStream()) {
             for (int readed = 0; readed < buff.length; ) {
                 readed += inputStream.read(buff, readed, buff.length - readed);

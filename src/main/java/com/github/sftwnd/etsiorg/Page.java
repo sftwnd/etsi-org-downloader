@@ -4,11 +4,12 @@ import edu.umd.cs.findbugs.annotations.NonNull;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.SneakyThrows;
+import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.HttpURLConnection;
 import java.net.URI;
-import java.net.URLConnection;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -16,13 +17,17 @@ import java.time.ZonedDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Predicate;
 
 /**
  * Page process helper
  */
+@Slf4j
 @AllArgsConstructor
 public class Page {
-    
+
+    private static final String USER_AGENT = "Mozilla/5.0";
+
     @SneakyThrows
     public static Page of(@NonNull HREF href) {
         return new Page(Objects.requireNonNull(href, "Page::of - href is null"));
@@ -35,14 +40,24 @@ public class Page {
     private HREF href;
 
     /**
-     * Page content length
+     * Page data connection
      */
-    private Integer contentLength;
+    private HttpURLConnection connection;
 
     /**
      * Page data stream
      */
     private InputStream inputStream;
+
+    /**
+     * Page content length
+     */
+    private Long contentLength;
+
+    /**
+     * Accept range flag
+     */
+    private boolean acceptRange = true;
 
     public Instant dateTime() {
         return Optional.ofNullable(href.getDateTime())
@@ -52,23 +67,24 @@ public class Page {
                 .orElse(null);
     }
 
-    public int contentLength() throws IOException {
+    public long contentLength() throws IOException {
         if (this.contentLength != null) {
             return this.contentLength;
         } else if (href.getBytes() != null) {
-            return href.getBytes().intValue();
+            return href.getBytes();
         }
-        connect();
+        connect(0L);
         return this.contentLength;
     }
 
     public InputStream inputStream() throws IOException {
-        connect();
+        connect(0L);
         return this.inputStream;
     }
-    
+
     /**
      * Full path to file (including file name) in the URI
+     *
      * @return Normalized full path to file (including file name)
      */
     public Path path() {
@@ -77,6 +93,7 @@ public class Page {
 
     /**
      * Name of file
+     *
      * @return name of file
      */
     public String fileName() {
@@ -85,17 +102,48 @@ public class Page {
 
     /**
      * URI of file
+     *
      * @return uri of file
      */
     public URI getUri() {
         return href.getUri();
     }
-    
-    private void connect() throws IOException {
-        if (this.inputStream == null) {
-            URLConnection connection = href.getUri().toURL().openConnection();
-            this.inputStream = connection.getInputStream();
-            this.contentLength = connection.getContentLength();
+
+    /**
+     * Make HttpURLConnection with offset if is not connected
+     * @throws IOException if an exception
+     */
+    public void connect(long offset) throws IOException {
+        if (this.connection != null && offset > 0) {
+            this.inputStream.close();
+            this.connection.disconnect();
+            this.connection = null;
+            this.inputStream = null;
+        }
+        if (this.connection == null) {
+            this.connection = (HttpURLConnection) href.getUri().toURL().openConnection();
+            connection.setRequestMethod("GET");
+            connection.setRequestProperty("User-Agent", USER_AGENT);
+            if (offset > 0L) {
+                if(! this.acceptRange) {
+                    logger.warn("Accept-Ranges was not defined for connection with offset request for: '{}'", href.path());
+                }
+                connection.setRequestProperty("Range", "bytes=" + offset + "-" + (this.contentLength - 1));
+            }
+            this.connection.connect();
+            int responseCode = connection.getResponseCode();
+            if (responseCode == HttpURLConnection.HTTP_OK) {
+                this.contentLength = connection.getContentLengthLong();
+                Optional.ofNullable(href.getBytes())
+                        .filter(Predicate.not(this.contentLength::equals))
+                        .ifPresent(bytes -> logger.warn("The length of the file: {} is different from the declared size {} of: '{}'", this.contentLength, bytes, href.path()));
+                this.acceptRange = Optional.ofNullable(connection.getHeaderField("Accept-Ranges")).map("bytes"::equals).orElse(false);
+                this.inputStream = connection.getInputStream();
+            } else if (responseCode == HttpURLConnection.HTTP_PARTIAL) {
+                this.inputStream = connection.getInputStream();
+            } else {
+                throw new IOException("Unable to open HTTP connection: " + connection.getHeaderField(0));
+            }
         }
     }
 
