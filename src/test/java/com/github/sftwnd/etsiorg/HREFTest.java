@@ -92,7 +92,7 @@ class HREFTest {
 
     @Test
     void noRegularFileTest() {
-        assertNull(builder().build().getRegularFile());
+        assertFalse(builder().build().isRegularFile());
     }
 
     @Test
@@ -103,11 +103,6 @@ class HREFTest {
     @Test
     void throwNonRegularFileBytesTest() {
         assertThrows(IllegalArgumentException.class, builder().bytes(0L).regularFile(false)::build);
-    }
-
-    @Test
-    void throwNonRegularFileDateTimeTest() {
-        assertThrows(IllegalArgumentException.class, builder().dateTime(LocalDateTime.now()).regularFile(false)::build);
     }
 
     @Test
@@ -122,7 +117,7 @@ class HREFTest {
 
     @Test
     void regularFileTest() {
-        assertEquals(true, builder().bytes(0L).dateTime(LocalDateTime.now()).regularFile(true).build().getRegularFile());
+        assertTrue(builder().bytes(0L).dateTime(LocalDateTime.now()).regularFile(true).build().isRegularFile());
     }
 
     @Test

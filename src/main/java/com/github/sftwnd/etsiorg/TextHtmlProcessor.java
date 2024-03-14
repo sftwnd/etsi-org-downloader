@@ -10,8 +10,9 @@ import java.io.InputStream;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.Comparator;
 import java.util.LinkedList;
-import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -22,7 +23,6 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
-import static java.lang.Boolean.TRUE;
 import static java.util.regex.Pattern.CASE_INSENSITIVE;
 
 /**
@@ -134,7 +134,8 @@ public class TextHtmlProcessor implements Processor<CompletableFuture<Stream<Pat
      */
     private @NonNull Stream<HREF> parseFile(@NonNull Page page) throws IOException {
         Matcher matcher = REF_PATTERN.matcher(loadFile(page));
-        List<HREF> hrefs = new LinkedList<>();
+        Collection<HREF> hrefs = new LinkedList<>();
+        Collection<HREF> versionedHrefs = new LinkedList<>();
         while (matcher.find()) {
             HREF href = HREF.builder()
                     .uri(page.getUri().resolve("/").resolve(matcher.group(9)))
@@ -152,11 +153,15 @@ public class TextHtmlProcessor implements Processor<CompletableFuture<Stream<Pat
                             .map("dir"::equals)
                             .orElse(false))
                     .build();
-            hrefs.add(href);
-            logger.trace("Found {}: {}", href.getRegularFile() == TRUE ? "file" : "path", href);
+            (href.isVersioned() ? versionedHrefs : hrefs).add(href);
+            logger.trace("Found {}: {}", href.isRegularFile() ? "file" : "path", href);
         }
+        versionedHrefs.stream()
+                .max(Comparator.comparing(href -> href.name().toString()))
+                .ifPresent(hrefs::add);
         return hrefs.stream();
     }
+
 
     /**
      * Load text/html file to String
@@ -165,13 +170,13 @@ public class TextHtmlProcessor implements Processor<CompletableFuture<Stream<Pat
      * @throws IOException in the case of error
      */
     private @NonNull String loadFile(@NonNull Page page) throws IOException {
-        byte[] buff = new byte[page.getContentLength()];
-        try (InputStream inputStream = page.getInputStream()) {
+        byte[] buff = new byte[page.contentLength()];
+        try (InputStream inputStream = page.inputStream()) {
             for (int readed = 0; readed < buff.length; ) {
                 readed += inputStream.read(buff, readed, buff.length - readed);
             }
         }
-        return new String(buff, page.getCharset());
+        return new String(buff);
     }
 
 }

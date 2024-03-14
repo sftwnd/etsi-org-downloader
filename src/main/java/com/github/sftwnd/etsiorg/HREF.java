@@ -31,7 +31,7 @@ public class HREF {
     @Setter
     private LocalDateTime dateTime;
     @Setter
-    private Boolean regularFile;
+    private boolean regularFile;
 
     public @NonNull Path path() {
         return Path.of(uri.getPath());
@@ -51,19 +51,16 @@ public class HREF {
         }
         this.uri = Objects.requireNonNull(uri, "HREF::new - uri is null");
         this.version = Optional.ofNullable(version).orElseGet(() -> versionOfUri(uri));
-        this.regularFile = Optional.ofNullable(regularFile)
-                .orElseGet(() -> bytes != null || dateTime != null ? true : null);
+        this.regularFile = Optional.ofNullable(regularFile).orElseGet(() -> bytes != null || dateTime != null);
         this.bytes = this.regularFile == Boolean.TRUE
                 ? Objects.requireNonNull(bytes, "HREF::new - bytes has to be defined for regular file")
                 : bytes;
         this.dateTime = this.regularFile == Boolean.TRUE
                 ? Objects.requireNonNull(dateTime, "HREF::new - dateTime has to be defined for regular file")
                 : dateTime;
-        if (this.regularFile == Boolean.FALSE) {
+        if (!this.regularFile) {
             if (this.bytes != null) {
                 throw new IllegalArgumentException("HREF::new - Unable to set size for the folder");
-            } else if (this.dateTime != null) {
-                throw new IllegalArgumentException("HREF::new - Unable to set dateTime for the folder");
             }
         }
     }
@@ -74,7 +71,7 @@ public class HREF {
                 (isVersioned() ? ", version: " + versionOfUri(uri) : "") +
                 (bytes == null ? "" : ", bytes: " + bytes) +
                 (dateTime == null ? "" : ", dateTime: " + dateTime) +
-                (regularFile == null ? "" : ", isRegular: " + regularFile) +
+                ", isRegular: " + regularFile +
                 "]";
     }
 
