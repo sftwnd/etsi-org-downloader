@@ -10,11 +10,17 @@ import java.io.IOException;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.attribute.FileTime;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Stream;
 
+import static java.nio.file.StandardOpenOption.APPEND;
 import static java.nio.file.StandardOpenOption.CREATE;
 import static java.nio.file.StandardOpenOption.TRUNCATE_EXISTING;
 import static java.nio.file.StandardOpenOption.WRITE;
@@ -26,6 +32,8 @@ import static java.nio.file.StandardOpenOption.WRITE;
 @Slf4j
 public class FileSaveProcessor implements Processor<CompletableFuture<Stream<Path>>> {
 
+    private static final int BUFFER_SIZE = 64 << 10;
+
     private final String root;
     private final Page page;
 
@@ -34,6 +42,10 @@ public class FileSaveProcessor implements Processor<CompletableFuture<Stream<Pat
         this.page = Objects.requireNonNull(page, "FileSaveProcessor::new - page is null");
     }
 
+    /**
+     * Save file and return completion future (in the caller thread)
+     * @return Completed future with list with one path to the loaded file
+     */
     @NonNull
     @Override
     public CompletableFuture<Stream<Path>> process() {
@@ -46,26 +58,49 @@ public class FileSaveProcessor implements Processor<CompletableFuture<Stream<Pat
      */
     @SneakyThrows
     private @Nullable Path saveFile() {
-        Path filePath = Path.of(this.root, this.page.path().toString());
-        if (checkFile() && checkFolder()) {
-            try (var inputStream = this.page.getInputStream();
-                 var outputStream = Files.newOutputStream(filePath, WRITE, CREATE, TRUNCATE_EXISTING)) {
-                byte[] buff = new byte[8192];
-                for (int readed = 0; readed < page.getContentLength(); ) {
-                    int bytes = inputStream.read(buff, 0, buff.length);
-                    readed += bytes;
-                    outputStream.write(buff, 0, bytes);
-                }
-                outputStream.flush();
-                logger.info("File: {} has been saved", filePath);
-                return filePath;
-            } catch (IOException ioex) {
-                logger.error("Unable to write file: {} by cause: {}", filePath, ioex.getMessage());
-                if (Files.isRegularFile(filePath)) {
-                    try {
-                        Files.delete(filePath);
-                    } catch (IOException ignore) {
+        final Page page = this.getPage();
+        final Path filePath = Path.of(this.getRoot(), page.path().toString());
+        try {
+            if (checkFolder()) {
+                long readed = checkFile();
+                if (readed != -1) {
+                    try (var outputStream = Files.newOutputStream(filePath, WRITE, CREATE, readed == 0 ? TRUNCATE_EXISTING : APPEND)) {
+                        byte[] buff = new byte[BUFFER_SIZE];
+                        long contentLength = page.contentLength();
+                        while (readed < contentLength) {
+                            try (var inputStream = page.inputStream()) {
+                                int bufferOffset = 0;
+                                while (readed < contentLength) {
+                                    int bytes = inputStream.read(buff, bufferOffset, buff.length - bufferOffset);
+                                    if (bytes < 0) {
+                                        if (bufferOffset > 0) {
+                                            outputStream.write(buff, 0, bufferOffset);
+                                        }
+                                        page.connect(readed);
+                                        break;
+                                    }
+                                    bufferOffset += bytes;
+                                    readed += bytes;
+                                    if (bufferOffset == buff.length || readed == contentLength) {
+                                        outputStream.write(buff, 0, bufferOffset);
+                                        bufferOffset = 0;
+                                    }
+                                }
+                            }
+                        }
+                        outputStream.flush();
                     }
+                    syncFileTime(filePath, false);
+                    logger.info("File: '{}' has been saved", filePath);
+                }
+                return filePath;
+            }
+        } catch (IOException ioex) {
+            logger.error("Unable to write file: '{}' by cause: {}", filePath, ioex.getMessage());
+            if (Files.isRegularFile(filePath)) {
+                try {
+                    Files.delete(filePath);
+                } catch (IOException ignore) {
                 }
             }
         }
@@ -74,19 +109,48 @@ public class FileSaveProcessor implements Processor<CompletableFuture<Stream<Pat
 
     /**
      * Try to check file for existence
-     * @return false if file already exists or unable to create file
+     * @return 0 if the file needs to be loaded from the very beginning, a positive offset if it is necessary to continue loading and -1 if loading is not required or impossible
      */
-    private synchronized boolean checkFile() {
-        Path filePath = Path.of(this.root, this.page.path().toString());
+    private synchronized long checkFile() throws IOException {
+        Page page = this.getPage();
+        Path filePath = Path.of(this.getRoot(), page.path().toString());
+        long contentLength = page.contentLength();
         if (Files.exists(filePath)) {
             if (Files.isRegularFile(filePath)) {
-                logger.trace("File: {} already exists.", filePath);
+                long fileSize = Files.size(filePath);
+                if (fileSize < contentLength) {
+                    logger.warn("Continue loading from offset {} of the file: '{}'", fileSize, filePath);
+                    return fileSize;
+                } else if (fileSize > contentLength) {
+                    logger.warn("Actual size: {} is larger than expected: {} for the file: '{}'", fileSize, page.getHref().getBytes(), filePath);
+                } else {
+                    logger.debug("File: '{}' already exists.", filePath);
+                }
+                syncFileTime(filePath, true);
             } else {
-                logger.trace("Unable to create file: {}. Folder with such name already exists.", filePath);
+                logger.trace("Unable to create file: '{}'. Folder with such name already exists.", filePath);
             }
-            return false;
+            return -1L;
         }
-        return true;
+        return 0;
+    }
+
+    private void syncFileTime(@NonNull Path filePath, boolean checkForChange) throws IOException {
+        Page page = this.getPage();
+        LocalDateTime dateTime = page.getHref().getDateTime();
+        if (dateTime != null) {
+            BasicFileAttributes attr = Files.readAttributes(filePath, BasicFileAttributes.class);
+            Instant creationInstant = attr.creationTime().toInstant().truncatedTo(ChronoUnit.SECONDS);
+            Instant creationDateTime = page.dateTime();
+            if (! creationInstant.equals(creationDateTime)) {
+                FileTime creationFileTime = FileTime.from(creationDateTime);
+                Files.setAttribute(filePath, "creationTime", creationFileTime);
+                Files.setLastModifiedTime(filePath, creationFileTime);
+                if (checkForChange) {
+                    logger.warn("File: '{}' already exists. Creation time has been reset to: {}", filePath, dateTime);
+                }
+            }
+        }
     }
 
     /**
@@ -94,19 +158,21 @@ public class FileSaveProcessor implements Processor<CompletableFuture<Stream<Pat
      * @return false if unable to create folder
      */
     private synchronized boolean checkFolder() {
-        Path folderPath = Path.of(this.root, this.page.path().toString()).getParent();
-        if (Files.exists(folderPath)) {
-            if (Files.isRegularFile(folderPath)) {
-                logger.error("Unable to create folder: {}. File with such name exists.", folderPath);
-                return false;
-            }
-        } else {
-            try {
-                Files.createDirectories(folderPath);
-            } catch (FileAlreadyExistsException ignore) {
-            } catch (IOException ioex) {
-                logger.error("Unable to create folder: {}. Cause: {}", folderPath, ioex.getLocalizedMessage());
-                return false;
+        Path folderPath = Path.of(this.getRoot(), this.getPage().path().toString()).getParent();
+        if (folderPath != null) {
+            if (Files.exists(folderPath)) {
+                if (Files.isRegularFile(folderPath)) {
+                    logger.error("Unable to create folder: '{}'. File with such name exists.", folderPath);
+                    return false;
+                }
+            } else {
+                try {
+                    Files.createDirectories(folderPath);
+                } catch (FileAlreadyExistsException ignore) {
+                } catch (IOException ioex) {
+                    logger.error("Unable to create folder: '{}'. Cause: {}", folderPath, ioex.getMessage());
+                    return false;
+                }
             }
         }
         return true;

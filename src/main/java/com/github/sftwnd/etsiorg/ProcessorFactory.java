@@ -9,7 +9,12 @@ import edu.umd.cs.findbugs.annotations.NonNull;
 @FunctionalInterface
 public interface ProcessorFactory<R> {
 
+    /**
+     * Processor implementation by the page reference
+     * @param page resource page reference
+     * @return page processor
+     */
     @NonNull
-     Processor<R> processor(@NonNull Page page);
+    Processor<R> processor(@NonNull Page page);
 
 }

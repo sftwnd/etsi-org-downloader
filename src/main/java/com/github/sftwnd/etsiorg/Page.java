@@ -4,55 +4,45 @@ import edu.umd.cs.findbugs.annotations.NonNull;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.SneakyThrows;
+import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.HttpURLConnection;
 import java.net.URI;
-import java.net.URLConnection;
-import java.nio.charset.Charset;
 import java.nio.file.Path;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.Objects;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
-import static java.nio.charset.StandardCharsets.UTF_8;
+import java.util.Optional;
+import java.util.function.Predicate;
 
 /**
  * Page process helper
  */
+@Slf4j
 @AllArgsConstructor
-@Getter
 public class Page {
 
-    private static final Pattern CONTENT_TYPE_PATTERN = Pattern.compile("^\\s*(\\S+)\\s*(?:;\\s*(\\S+)\\s*=\\s*(\\S+)\\s*)?$");
+    private static final String USER_AGENT = "Mozilla/5.0";
 
     @SneakyThrows
-    public static Page of(@NonNull URI uri) {
-        return new Page(Objects.requireNonNull(uri, "Page::of - uri is null"));
+    public static Page of(@NonNull HREF href) {
+        return new Page(Objects.requireNonNull(href, "Page::of - href is null"));
     }
 
     /**
      * Page URI
      */
-    private URI uri;
+    @Getter
+    private HREF href;
 
     /**
-     * Page content type
+     * Page data connection
      */
-    private String contentType;
-
-
-    /**
-     * Page content length
-     */
-    private int contentLength;
-
-
-    /**
-     * Page character set
-     */
-    private Charset charset;
-
+    private HttpURLConnection connection;
 
     /**
      * Page data stream
@@ -60,52 +50,123 @@ public class Page {
     private InputStream inputStream;
 
     /**
+     * Page content length
+     */
+    private Long contentLength;
+
+    /**
+     * Accept range flag
+     */
+    private boolean acceptRange = true;
+
+    /**
+     * Request resource creation date
+     * @return date of resource creation
+     */
+    public Instant dateTime() {
+        return Optional.ofNullable(href.getDateTime())
+                .map(dateTime -> dateTime.atZone(ZoneId.systemDefault()))
+                .map(ZonedDateTime::toInstant)
+                .map(instant -> instant.truncatedTo(ChronoUnit.SECONDS))
+                .orElse(null);
+    }
+
+    /**
+     * Size of file resource if defined in HREF or contentLength from HTTP Connection
+     * @return file resource size
+     * @throws IOException in the case of error
+     */
+    public long contentLength() throws IOException {
+        if (this.contentLength != null) {
+            return this.contentLength;
+        } else if (href.getBytes() != null) {
+            return href.getBytes();
+        }
+        connect(0L);
+        return this.contentLength;
+    }
+
+    /**
+     * InputStream of resource if connected
+     * @return actual resource stream
+     * @throws IOException in the case of error
+     */
+    public InputStream inputStream() throws IOException {
+        connect(0L);
+        return this.inputStream;
+    }
+
+    /**
      * Full path to file (including file name) in the URI
+     *
      * @return Normalized full path to file (including file name)
      */
     public Path path() {
-        return Path.of(uri.getPath());
+        return href.path();
     }
 
     /**
      * Name of file
+     *
      * @return name of file
      */
     public String fileName() {
-        return path().getFileName().toString();
+        return href.name().toString();
     }
 
     /**
-     * Check that path is child of URI
+     * URI of file
+     *
+     * @return uri of file
      */
-    public boolean checkPath(@NonNull Path path) {
-        return !path().normalize().startsWith(path.normalize());
+    public URI getUri() {
+        return href.getUri();
+    }
+
+    /**
+     * Make HttpURLConnection with offset if is not connected
+     * @throws IOException if an exception
+     */
+    public void connect(long offset) throws IOException {
+        if (this.connection != null && offset > 0) {
+            this.inputStream.close();
+            this.connection.disconnect();
+            this.connection = null;
+            this.inputStream = null;
+        }
+        if (this.connection == null) {
+            this.connection = (HttpURLConnection) href.getUri().toURL().openConnection();
+            connection.setRequestMethod("GET");
+            connection.setRequestProperty("User-Agent", USER_AGENT);
+            if (offset > 0L) {
+                if(! this.acceptRange) {
+                    logger.warn("Accept-Ranges was not defined for connection with offset request for: '{}'", href.path());
+                }
+                connection.setRequestProperty("Range", "bytes=" + offset + "-" + (this.contentLength - 1));
+            }
+            this.connection.connect();
+            int responseCode = connection.getResponseCode();
+            if (responseCode == HttpURLConnection.HTTP_OK) {
+                this.contentLength = connection.getContentLengthLong();
+                Optional.ofNullable(href.getBytes())
+                        .filter(Predicate.not(this.contentLength::equals))
+                        .ifPresent(bytes -> logger.warn("The length of the file: {} is different from the declared size {} of: '{}'", this.contentLength, bytes, href.path()));
+                this.acceptRange = Optional.ofNullable(connection.getHeaderField("Accept-Ranges")).map("bytes"::equals).orElse(false);
+                this.inputStream = connection.getInputStream();
+            } else if (responseCode == HttpURLConnection.HTTP_PARTIAL) {
+                this.inputStream = connection.getInputStream();
+            } else {
+                throw new IOException("Unable to open HTTP connection: " + connection.getHeaderField(0));
+            }
+        }
     }
 
     /**
      * Connect to URI resource and load resource properties
-     * @param uri URI to file
-     * @throws IOException if an error occurs
+     * @param href file resource reference
      */
-    private Page(@NonNull URI uri) throws IOException {
-        URLConnection connection = Objects.requireNonNull(uri, "Loader::new - URI is null")
-                .toURL()
-                .openConnection();
-        this.uri = uri;
-        this.inputStream = connection.getInputStream();
-        this.contentLength = connection.getContentLength();
-        Matcher matcher = CONTENT_TYPE_PATTERN.matcher(connection.getContentType());
-        if (matcher.matches()) {
-            this.contentType = matcher.group(1);
-            if ("charset".equalsIgnoreCase(matcher.group(2))) {
-                this.charset = Charset.forName(matcher.group(3));
-            } else {
-                this.charset = UTF_8;
-            }
-        } else {
-            this.contentType = connection.getContentType();
-            this.charset = UTF_8;
-        }
+    private Page(@NonNull HREF href) {
+        this.href = Objects.requireNonNull(href, "Loader::new - URI is null");
     }
 
     /**
@@ -114,12 +175,10 @@ public class Page {
      */
     @Override
     public String toString() {
-        return "Path [root: '" + getUri().resolve("/").normalize() + '\'' +
-                ", path: '" + path() + '\'' +
-                ", contentLength: " + getContentLength() +
-                ", contentType: '" + contentType + '\'' +
-                ", fileName: '" + fileName() + '\'' +
-                ( charset == null ? "" : ", charset: '" + charset + '\'' ) +
+        return "Path [ " + this.getHref() +
+                ", path: '" + this.path() + '\'' +
+                ", fileName: '" + this.fileName() + '\'' +
+                (this.contentLength == null ? "" : ", contentLength: " + this.contentLength) +
                 " ]";
     }
 
