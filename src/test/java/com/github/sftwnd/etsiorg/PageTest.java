@@ -61,7 +61,7 @@ class PageTest {
 
     @Test
     void inputStreamTest() throws IOException {
-        Page page = spy(this.page());
+        Page page = this.page();
         doNothing().when(page).connect(0L);
         assertDoesNotThrow(page::inputStream);
         verify(page, atLeastOnce()).connect(0L);
@@ -84,8 +84,19 @@ class PageTest {
         assertSame(this.uri, this.page().getUri());
     }
 
+    @Test
+    void toStringTest() {
+        Page page = page();
+        when(href.name()).thenReturn(Path.of("path", "fileName"));
+        when(page.fileName()).thenReturn("fileName.pdf");
+        assertDoesNotThrow(page::toString);
+        verify(page, atLeastOnce()).getHref();
+        verify(page, atLeastOnce()).path();
+        verify(page, atLeastOnce()).fileName();
+    }
+
     private Page page() {
-        return Page.of(this.href);
+        return spy(Page.of(this.href));
     }
 
     @BeforeEach

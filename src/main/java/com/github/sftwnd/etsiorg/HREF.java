@@ -60,7 +60,7 @@ public class HREF {
      * @return File path on the site
      */
     public @NonNull Path path() {
-        return Path.of(uri.getPath());
+        return Path.of(getUri().getPath());
     }
 
     /**
@@ -76,7 +76,7 @@ public class HREF {
      * @return true for the versioned resources
      */
     public boolean isVersioned() {
-        return version != NO_VERSION;
+        return this.getVersion() != NO_VERSION;
     }
 
     /**
@@ -113,11 +113,11 @@ public class HREF {
      */
     @Override
     public String toString() {
-        return "HREF: [ uri '" + uri.toString() +'\'' +
-                (isVersioned() ? ", version: " + versionOfUri(uri) : "") +
-                (bytes == null ? "" : ", bytes: " + bytes) +
-                (dateTime == null ? "" : ", dateTime: " + dateTime) +
-                ", isRegular: " + regularFile +
+        return "HREF: [ uri '" + getUri().toString() +'\'' +
+                (isVersioned() ? ", version: " + versionOfUri(getUri()) : "") +
+                (getBytes() == null ? "" : ", bytes: " + getBytes()) +
+                (getDateTime() == null ? "" : ", dateTime: " + getDateTime()) +
+                ", isRegular: " + isRegularFile() +
                 "]";
     }
 
@@ -143,7 +143,7 @@ public class HREF {
      * @param fileName versioned resource file name
      * @return version of versioned resource
      */
-    private static long versionOfFile(@NonNull String fileName) {
+    public static long versionOfFile(@NonNull String fileName) {
         Matcher matcher = VERSION_PATTERN.matcher(fileName);
         if (matcher.matches()) {
             return IntStream.range(0, 4)
@@ -179,8 +179,6 @@ public class HREF {
         long num = (version >> (12 * (4 - position))) & 0xFFFL;
         return (num < 10 ? "0" : "") + num;
     }
-
-    // Builder
 
     /**
      * HREF builder factory

@@ -61,13 +61,14 @@ public class TextHtmlProcessor implements Processor<CompletableFuture<Stream<Pat
      */
     @Override
     public @NonNull CompletableFuture<Stream<Path>> process() {
+        final Page page = this.getPage();
         logger.debug("Start text/html process: '{}'", page.path());
         try {
             var result = swap(
                     parseFile(page)
                             .map(href -> CompletableFuture
                                     .supplyAsync(() -> Page.of(href))
-                                    .thenApply(processorFactory::processor)
+                                    .thenApply(this.getProcessorFactory()::processor)
                                     .thenCompose(Processor::process)));
             logger.trace("Text/html page has been processed: '{}'", page.path());
             return result;
@@ -89,9 +90,9 @@ public class TextHtmlProcessor implements Processor<CompletableFuture<Stream<Pat
         @SuppressWarnings("unchecked")
         CompletableFuture<Stream<X>>[] futures = (CompletableFuture<Stream<X>>[])futureCollection.toArray(size -> new CompletableFuture<?>[size]);
         Function<? super Void, Stream<X>> swapAsync = ignore -> Arrays.stream(futures).flatMap(CompletableFuture::join);
-        return executor == null
+        return getExecutor() == null
                 ? CompletableFuture.allOf(futures).thenApplyAsync(swapAsync)
-                : CompletableFuture.allOf(futures).thenApplyAsync(swapAsync, executor);
+                : CompletableFuture.allOf(futures).thenApplyAsync(swapAsync, getExecutor());
     }
 
     /*
@@ -176,14 +177,14 @@ public class TextHtmlProcessor implements Processor<CompletableFuture<Stream<Pat
         if (actualRef != null) {
             hrefs.add(actualRef);
             logger.info("Found actual version: '{}'", actualRef.path());
-            if (this.onExpires != null) {
+            if (this.getOnExpires() != null) {
                 Optional.of(versionedHrefs
                                 .stream()
                                 .filter(Predicate.not(href -> href == actualRef))
                                 .map(HREF::path)
                                 .collect(Collectors.toList()))
                         .filter(Predicate.not(Collection::isEmpty))
-                        .ifPresent(this.onExpires);
+                        .ifPresent(this.getOnExpires());
             }
         }
         return hrefs.stream();

@@ -20,6 +20,9 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.verify;
 
 class HREFTest {
 
@@ -139,6 +142,22 @@ class HREFTest {
     @Test
     void isVersioned() {
         assertTrue(builder(DEFAULT_VERSIONED_NAME).build().isVersioned());
+    }
+
+    @Test
+    void toStringTest() {
+        HREF href = spy(HREF.builder()
+                .uri(URI.create("http://localhost/path/file"))
+                .dateTime(LocalDateTime.now())
+                .regularFile(true)
+                .bytes(Math.abs(new Random().nextLong())+1)
+                .build());
+        assertDoesNotThrow(href::toString);
+        verify(href, atLeastOnce()).getUri();
+        verify(href, atLeastOnce()).getBytes();
+        verify(href, atLeastOnce()).getVersion();
+        verify(href, atLeastOnce()).getDateTime();
+        verify(href, atLeastOnce()).isVersioned();
     }
 
     private HREF.Builder builder() {

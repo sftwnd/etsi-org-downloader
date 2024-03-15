@@ -175,9 +175,9 @@ public class Page {
      */
     @Override
     public String toString() {
-        return "Path [ " + href +
-                ", path: '" + path() + '\'' +
-                ", fileName: '" + fileName() + '\'' +
+        return "Path [ " + this.getHref() +
+                ", path: '" + this.path() + '\'' +
+                ", fileName: '" + this.fileName() + '\'' +
                 (this.contentLength == null ? "" : ", contentLength: " + this.contentLength) +
                 " ]";
     }

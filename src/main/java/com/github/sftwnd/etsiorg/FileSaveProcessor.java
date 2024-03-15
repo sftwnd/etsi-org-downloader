@@ -58,8 +58,8 @@ public class FileSaveProcessor implements Processor<CompletableFuture<Stream<Pat
      */
     @SneakyThrows
     private @Nullable Path saveFile() {
-        Page page = this.getPage();
-        Path filePath = Path.of(this.getRoot(), page.path().toString());
+        final Page page = this.getPage();
+        final Path filePath = Path.of(this.getRoot(), page.path().toString());
         try {
             if (checkFolder()) {
                 long readed = checkFile();
