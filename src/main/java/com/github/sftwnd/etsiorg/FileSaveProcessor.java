@@ -58,7 +58,8 @@ public class FileSaveProcessor implements Processor<CompletableFuture<Stream<Pat
      */
     @SneakyThrows
     private @Nullable Path saveFile() {
-        Path filePath = Path.of(this.root, this.page.path().toString());
+        Page page = this.getPage();
+        Path filePath = Path.of(this.getRoot(), page.path().toString());
         try {
             if (checkFolder()) {
                 long readed = checkFile();
@@ -111,8 +112,9 @@ public class FileSaveProcessor implements Processor<CompletableFuture<Stream<Pat
      * @return 0 if the file needs to be loaded from the very beginning, a positive offset if it is necessary to continue loading and -1 if loading is not required or impossible
      */
     private synchronized long checkFile() throws IOException {
-        Path filePath = Path.of(this.root, this.page.path().toString());
-        long contentLength = this.page.contentLength();
+        Page page = this.getPage();
+        Path filePath = Path.of(this.getRoot(), page.path().toString());
+        long contentLength = page.contentLength();
         if (Files.exists(filePath)) {
             if (Files.isRegularFile(filePath)) {
                 long fileSize = Files.size(filePath);
@@ -120,7 +122,7 @@ public class FileSaveProcessor implements Processor<CompletableFuture<Stream<Pat
                     logger.warn("Continue loading from offset {} of the file: '{}'", fileSize, filePath);
                     return fileSize;
                 } else if (fileSize > contentLength) {
-                    logger.warn("Actual size: {} is larger than expected: {} for the file: '{}'", fileSize, this.page.getHref().getBytes(), filePath);
+                    logger.warn("Actual size: {} is larger than expected: {} for the file: '{}'", fileSize, page.getHref().getBytes(), filePath);
                 } else {
                     logger.debug("File: '{}' already exists.", filePath);
                 }
@@ -134,11 +136,12 @@ public class FileSaveProcessor implements Processor<CompletableFuture<Stream<Pat
     }
 
     private void syncFileTime(@NonNull Path filePath, boolean checkForChange) throws IOException {
-        LocalDateTime dateTime = this.page.getHref().getDateTime();
+        Page page = this.getPage();
+        LocalDateTime dateTime = page.getHref().getDateTime();
         if (dateTime != null) {
             BasicFileAttributes attr = Files.readAttributes(filePath, BasicFileAttributes.class);
             Instant creationInstant = attr.creationTime().toInstant().truncatedTo(ChronoUnit.SECONDS);
-            Instant creationDateTime = this.page.dateTime();
+            Instant creationDateTime = page.dateTime();
             if (! creationInstant.equals(creationDateTime)) {
                 FileTime creationFileTime = FileTime.from(creationDateTime);
                 Files.setAttribute(filePath, "creationTime", creationFileTime);
@@ -155,7 +158,7 @@ public class FileSaveProcessor implements Processor<CompletableFuture<Stream<Pat
      * @return false if unable to create folder
      */
     private synchronized boolean checkFolder() {
-        Path folderPath = Path.of(this.root, this.page.path().toString()).getParent();
+        Path folderPath = Path.of(this.getRoot(), this.getPage().path().toString()).getParent();
         if (folderPath != null) {
             if (Files.exists(folderPath)) {
                 if (Files.isRegularFile(folderPath)) {

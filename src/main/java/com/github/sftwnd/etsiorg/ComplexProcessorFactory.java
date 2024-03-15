@@ -56,9 +56,8 @@ public class ComplexProcessorFactory implements ProcessorFactory<CompletableFutu
     @Override
     public @NonNull Processor<CompletableFuture<Stream<Path>>> processor(@NonNull Page page) {
         return ! page.getHref().isRegularFile() ? this.textHtmlProcessor(page)
-                : page.fileName().endsWith(".log") || page.fileName().endsWith(".tmp") ? EmptyProcessor.DEFAULT
+                : page.fileName().endsWith(".log") || page.fileName().endsWith(".tmp") || page.fileName().endsWith(".temp") ? EmptyProcessor.DEFAULT
                 : this.fileSaveProcessor(page);
-
     }
 
 }
