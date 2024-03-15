@@ -1,5 +1,5 @@
 #!/bin/bash
-ETSI_ORG_VERSION=1.0
+ETSI_ORG_VERSION=1.1
 ETSI_ORG_JAR="etsiorg-downloader-${ETSI_ORG_VERSION}-jar-with-dependencies.jar"
 LOGBACK_FILE="./src/main/resources/logback.xml"
 if [ ! -f "target/${ETSI_ORG_JAR}" ]; then
