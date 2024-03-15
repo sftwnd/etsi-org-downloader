@@ -21,7 +21,7 @@ import java.util.stream.Stream;
 @Slf4j
 public class Main {
 
-    private static final String DEFAULT_URI = // "https://www.etsi.org/deliver/";
+    private static final String DEFAULT_URI = "https://www.etsi.org/deliver/";
         // "https://www.etsi.org/deliver/etsi_ts/129000_129099/";
         // "https://www.etsi.org/deliver/etsi_ts/129000_129099/129013/";
         // "https://www.etsi.org/deliver/etsi_ts/129000_129099/129002/";
@@ -29,7 +29,7 @@ public class Main {
         // "https://www.etsi.org/deliver/etsi_ts/";
         // "https://www.etsi.org/deliver/etsi_ts/129000_129099/129079/10.07.00_60";
         // "https://www.etsi.org/deliver/etsi_ts/129000_129099/129078/17.00.00_60";
-        "https://www.etsi.org/deliver/etsi_ts/136500_136599/13652103/17.01.00_60/";
+        // "https://www.etsi.org/deliver/etsi_ts/136500_136599/13652103/17.01.00_60/";
 
     private static final String URI_PROPERTY = "uri";
     private static final String DEST_PROPERTY = "dest";
