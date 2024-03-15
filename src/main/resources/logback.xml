@@ -15,7 +15,7 @@
         <appender-ref ref="STDOUT"/>
     </appender>
 
-    <logger name="com.github.sftwnd.etsiorg" level="DEBUG" additivity="false"><appender-ref ref="ASYNC"/></logger>
+    <logger name="com.github.sftwnd.etsiorg" level="INFO" additivity="false"><appender-ref ref="ASYNC"/></logger>
 
     <root level="INFO">
         <appender-ref ref="ASYNC" />

@@ -55,7 +55,7 @@ public class Main {
                     .map(stream -> stream.collect(Collectors.toList()))
                     .filter(Predicate.not(Collection::isEmpty))
                     .ifPresentOrElse(
-                            paths -> logger.info("There are {} files has been loaded:\n\t{}", paths.size(), String.join("\n\t", paths)),
+                            paths -> logger.info("There are {} files has been loaded", paths.size()),
                             () -> logger.info("No files were uploaded")
                     );
         } finally {
