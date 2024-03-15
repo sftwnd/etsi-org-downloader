@@ -171,22 +171,23 @@ public class TextHtmlProcessor implements Processor<CompletableFuture<Stream<Pat
             (href.isVersioned() ? versionedHrefs : hrefs).add(href);
             logger.trace("Found {}: {}", href.isRegularFile() ? "file" : "path", href);
         }
-        HREF actualRef = versionedHrefs.stream()
+        versionedHrefs
+                .stream()
                 .max(Comparator.comparing(href -> href.name().toString()))
-                .orElse(null);
-        if (actualRef != null) {
-            hrefs.add(actualRef);
-            logger.info("Found actual version: '{}'", actualRef.path());
-            if (this.getOnExpires() != null) {
-                Optional.of(versionedHrefs
-                                .stream()
-                                .filter(Predicate.not(href -> href == actualRef))
-                                .map(HREF::path)
-                                .collect(Collectors.toList()))
-                        .filter(Predicate.not(Collection::isEmpty))
-                        .ifPresent(this.getOnExpires());
-            }
-        }
+                .ifPresent(
+                        actualRef -> {
+                            hrefs.add(actualRef);
+                            logger.info("Found actual version: '{}'", actualRef.path());
+                            if (this.getOnExpires() != null) {
+                                Optional.of(versionedHrefs
+                                                .stream()
+                                                .filter(Predicate.not(href -> href == actualRef))
+                                                .map(HREF::path)
+                                                .collect(Collectors.toList()))
+                                        .filter(Predicate.not(Collection::isEmpty))
+                                        .ifPresent(this.getOnExpires());
+                            }
+                        });
         return hrefs.stream();
     }
 
