@@ -6,7 +6,7 @@
 
     <groupId>com.github.sftwnd.etsiorg</groupId>
     <artifactId>etsiorg-downloader</artifactId>
-    <version>1.1</version>
+    <version>1.2</version>
 
     <name>ETSI.ORG :: Documents :: Downloader</name>
     <description>Document downloader from ETSI.ORG website</description>
@@ -24,7 +24,7 @@
         <url>https://github.com/sftwnd/etsi-org-downloader</url>
         <connection>scm:git:git@github.com:sftwnd/etsi-org-downloader.git</connection>
         <developerConnection>scm:git:git@github.com:sftwnd/etsi-org-downloader.git</developerConnection>
-        <tag>Release-1.1</tag>
+        <tag>Release-1.2</tag>
     </scm>
 
     <properties>
