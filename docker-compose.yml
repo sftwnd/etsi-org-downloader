@@ -9,7 +9,7 @@ services:
     image: sftwnd/etsi-org:1.0
     hostname: etsiorg-downloader
     volumes:
-      - ~/.m2:/root/.m2
+      - ${HOME}/.m2:/root/.m2
       - ./.settings.xml:/root/.m2/settings.xml
       - ./:/opt/share/etsiorg
     command:
