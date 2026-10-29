@@ -5,6 +5,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
@@ -13,6 +14,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -41,6 +43,17 @@ class FileSaveProcessorTest extends AbstractFileSourceTest {
             assertEquals(fileSize, is.read(buff));
         }
         assertEquals(0, Arrays.compare(this.buff, 0, fileSize, buff, 0, fileSize));
+    }
+
+    @Test
+    void processResumeFileContentTest() throws IOException {
+        int fileSize = Long.valueOf(this.bytes).intValue();
+        int offset = fileSize / 2;
+        Files.write(this.tempFile, Arrays.copyOf(this.buff, offset));
+        when(this.page.inputStreamFrom(offset)).thenReturn(new ByteArrayInputStream(this.buff, offset, fileSize - offset));
+        Path path = this.fileSaveProcessor.process().join().findFirst().orElse(null);
+        assertNotNull(path);
+        assertArrayEquals(Arrays.copyOf(this.buff, fileSize), Files.readAllBytes(path));
     }
 
     @Test

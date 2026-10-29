@@ -75,6 +75,7 @@ abstract class AbstractFileSourceTest {
         when(this.href.name()).thenReturn(fileName());
         when(this.page.getHref()).thenReturn(this.href);
         when(this.page.inputStream()).thenReturn(this.inputStream);
+        when(this.page.inputStreamFrom(anyLong())).thenReturn(this.inputStream);
 
     }
 
