@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 
+import java.io.EOFException;
 import java.io.IOException;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
@@ -68,7 +69,8 @@ public class FileSaveProcessor implements Processor<CompletableFuture<Stream<Pat
                         byte[] buff = new byte[BUFFER_SIZE];
                         long contentLength = page.contentLength();
                         while (readed < contentLength) {
-                            try (var inputStream = page.inputStream()) {
+                            long offset = readed;
+                            try (var inputStream = page.inputStreamFrom(offset)) {
                                 int bufferOffset = 0;
                                 while (readed < contentLength) {
                                     int bytes = inputStream.read(buff, bufferOffset, buff.length - bufferOffset);
@@ -76,7 +78,6 @@ public class FileSaveProcessor implements Processor<CompletableFuture<Stream<Pat
                                         if (bufferOffset > 0) {
                                             outputStream.write(buff, 0, bufferOffset);
                                         }
-                                        page.connect(readed);
                                         break;
                                     }
                                     bufferOffset += bytes;
@@ -86,6 +87,9 @@ public class FileSaveProcessor implements Processor<CompletableFuture<Stream<Pat
                                         bufferOffset = 0;
                                     }
                                 }
+                            }
+                            if (readed == offset) {
+                                throw new EOFException("No data has been received from offset " + offset);
                             }
                         }
                         outputStream.flush();

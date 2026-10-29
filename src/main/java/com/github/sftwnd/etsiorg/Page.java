@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 
+import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
@@ -92,7 +93,17 @@ public class Page {
      * @throws IOException in the case of error
      */
     public InputStream inputStream() throws IOException {
-        connect(0L);
+        return inputStreamFrom(0L);
+    }
+
+    /**
+     * InputStream of resource from the offset
+     * @param offset position in the resource to read from, connection is reopened for the positive offset
+     * @return resource stream positioned at the offset
+     * @throws IOException in the case of error
+     */
+    public InputStream inputStreamFrom(long offset) throws IOException {
+        connect(offset);
         return this.inputStream;
     }
 
@@ -124,7 +135,9 @@ public class Page {
     }
 
     /**
-     * Make HttpURLConnection with offset if is not connected
+     * Make HttpURLConnection if is not connected or reconnect from the positive offset.
+     * The bytes before the offset are skipped if the server ignores the Range request
+     * @param offset position in the resource to read from
      * @throws IOException if an exception
      */
     public void connect(long offset) throws IOException {
@@ -142,7 +155,7 @@ public class Page {
                 if(! this.acceptRange) {
                     logger.warn("Accept-Ranges was not defined for connection with offset request for: '{}'", href.path());
                 }
-                connection.setRequestProperty("Range", "bytes=" + offset + "-" + (this.contentLength - 1));
+                connection.setRequestProperty("Range", "bytes=" + offset + "-");
             }
             this.connection.connect();
             int responseCode = connection.getResponseCode();
@@ -153,10 +166,33 @@ public class Page {
                         .ifPresent(bytes -> logger.warn("The length of the file: {} is different from the declared size {} of: '{}'", this.contentLength, bytes, href.path()));
                 this.acceptRange = Optional.ofNullable(connection.getHeaderField("Accept-Ranges")).map("bytes"::equals).orElse(false);
                 this.inputStream = connection.getInputStream();
+                if (offset > 0L) {
+                    logger.warn("Range request was ignored, {} bytes will be skipped for: '{}'", offset, href.path());
+                    skipFully(this.inputStream, offset);
+                }
             } else if (responseCode == HttpURLConnection.HTTP_PARTIAL) {
                 this.inputStream = connection.getInputStream();
             } else {
                 throw new IOException("Unable to open HTTP connection: " + connection.getHeaderField(0));
+            }
+        }
+    }
+
+    /**
+     * Skip exactly the given number of bytes in the stream
+     * @param inputStream stream to skip the bytes in
+     * @param bytes number of bytes to skip
+     * @throws IOException if the stream ends before the bytes are skipped or in the case of error
+     */
+    private static void skipFully(@NonNull InputStream inputStream, long bytes) throws IOException {
+        for (long remaining = bytes; remaining > 0; ) {
+            long skipped = inputStream.skip(remaining);
+            if (skipped > 0) {
+                remaining -= skipped;
+            } else if (inputStream.read() >= 0) {
+                remaining--;
+            } else {
+                throw new EOFException("Unable to skip " + bytes + " bytes: end of stream after " + (bytes - remaining));
             }
         }
     }
