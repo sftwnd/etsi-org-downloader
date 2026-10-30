@@ -1,7 +1,6 @@
 package com.github.sftwnd.etsiorg;
 
 import com.sun.net.httpserver.HttpServer;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -15,14 +14,14 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.ZoneId;
-import java.time.ZoneOffset;
+import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MainTest {
 
@@ -35,53 +34,31 @@ class MainTest {
     Path tempDir;
 
     @Test
-    void defaultThreadsTest() {
-        assertEquals(4, Main.threads(null));
-        assertEquals(4, Main.threads(" "));
-    }
-
-    @Test
-    void threadsTest() {
-        assertEquals(2, Main.threads("2"));
-        assertEquals(16, Main.threads(" 16 "));
-    }
-
-    @Test
-    void defaultZoneTest() {
-        assertEquals(ZoneOffset.UTC, Main.zone(null));
-        assertEquals(ZoneOffset.UTC, Main.zone(""));
-    }
-
-    @Test
-    void zoneTest() {
-        assertEquals(ZoneId.of("Europe/Paris"), Main.zone("Europe/Paris"));
-        assertEquals(ZoneOffset.ofHours(3), Main.zone(" +03:00 "));
-    }
-
-    @ParameterizedTest
-    @ValueSource(strings = {"Mars/Olympus", "+25:00", "UTC+"})
-    void invalidZoneTest(String value) {
-        assertThrows(IllegalArgumentException.class, () -> Main.zone(value));
-    }
-
-    @ParameterizedTest
-    @ValueSource(strings = {"0", "-1", "four", "1.5", "99999999999"})
-    void invalidThreadsTest(String value) {
-        assertThrows(IllegalArgumentException.class, () -> Main.threads(value));
-    }
-
-    @Test
     void runTest() throws Exception {
         AtomicInteger fileRequests = new AtomicInteger();
         HttpServer server = server(true, fileRequests);
         try {
-            configure(server);
-            assertEquals(Main.SUCCESS, Main.run());
+            Map<String, String> properties = properties(server);
+            assertEquals(Main.SUCCESS, run(properties, Map.of()));
             for (Map.Entry<String, Integer> file : FILES.entrySet()) {
                 assertEquals((long) file.getValue(), Files.size(this.tempDir.resolve(file.getKey().substring(1))));
             }
             assertEquals(2, fileRequests.get());
-            assertEquals(Main.SUCCESS, Main.run());
+            assertEquals(Main.SUCCESS, run(properties, Map.of()));
+            assertEquals(2, fileRequests.get());
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    void runWithEnvironmentTest() throws Exception {
+        AtomicInteger fileRequests = new AtomicInteger();
+        HttpServer server = server(true, fileRequests);
+        try {
+            Map<String, String> environment = new HashMap<>();
+            properties(server).forEach((property, value) -> environment.put("ETSIORG_" + property.toUpperCase(Locale.ROOT), value));
+            assertEquals(Main.SUCCESS, run(Map.of(), environment));
             assertEquals(2, fileRequests.get());
         } finally {
             server.stop(0);
@@ -92,8 +69,7 @@ class MainTest {
     void runFailureTest() throws Exception {
         HttpServer server = server(false, new AtomicInteger());
         try {
-            configure(server);
-            assertEquals(Main.FAILURE, Main.run());
+            assertEquals(Main.FAILURE, run(properties(server), Map.of()));
         } finally {
             server.stop(0);
         }
@@ -101,25 +77,40 @@ class MainTest {
 
     @Test
     void runInvalidConfigurationTest() {
-        System.setProperty("uri", "ftp://www.etsi.org/deliver/");
-        assertEquals(Main.INVALID_CONFIGURATION, Main.run());
-        System.setProperty("uri", "https://www.etsi.org/deliver/");
-        System.setProperty("threads", "none");
-        assertEquals(Main.INVALID_CONFIGURATION, Main.run());
+        assertEquals(Main.INVALID_CONFIGURATION, run(Map.of("uri", "ftp://www.etsi.org/deliver/"), Map.of()));
+        assertEquals(Main.INVALID_CONFIGURATION, run(Map.of("threads", "none"), Map.of()));
+        assertEquals(Main.INVALID_CONFIGURATION, run(Map.of(), Map.of("ETSIORG_ZONE", "Mars/Olympus")));
     }
 
-    @AfterEach
-    void tearDown() {
-        System.clearProperty("uri");
-        System.clearProperty("dest");
-        System.clearProperty("threads");
-        System.clearProperty("zone");
+    @ParameterizedTest
+    @ValueSource(strings = {"-h", "--help"})
+    void helpTest(String argument) {
+        assertEquals(Main.SUCCESS, Main.run(new String[] {argument}, name -> null, name -> null));
     }
 
-    private void configure(HttpServer server) {
-        System.setProperty("uri", "http://" + server.getAddress().getHostString() + ":" + server.getAddress().getPort() + FOLDER);
-        System.setProperty("dest", this.tempDir.toString());
-        System.setProperty("threads", "2");
+    @Test
+    void helpTextTest() {
+        String help = Main.help();
+        assertTrue(help.startsWith("Usage: etsiorg-downloader [-h | --help]"), help);
+        assertTrue(help.contains(Settings.help()), help);
+        assertTrue(help.contains("0 - no failures, 1 - some resources have failed, 2 - invalid configuration"), help);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"help", "--uri=https://www.etsi.org/deliver/", "--help --verbose"})
+    void unknownArgumentsTest(String arguments) {
+        assertEquals(Main.INVALID_CONFIGURATION, Main.run(arguments.split(" "), name -> null, name -> null));
+    }
+
+    private static int run(Map<String, String> properties, Map<String, String> environment) {
+        return Main.run(new String[0], properties::get, environment::get);
+    }
+
+    private Map<String, String> properties(HttpServer server) {
+        return Map.of(
+                "uri", "http://" + server.getAddress().getHostString() + ":" + server.getAddress().getPort() + FOLDER,
+                "dest", this.tempDir.toString(),
+                "threads", "2");
     }
 
     /**

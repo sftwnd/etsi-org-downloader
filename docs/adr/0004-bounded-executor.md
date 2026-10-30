@@ -2,7 +2,8 @@
 
 - Status: Accepted
 - Date: 2026-10-30
-- Amended: 2026-10-30 — 4 threads by default instead of the number of processors (#57)
+- Amended: 2026-10-30 — 4 threads by default instead of the number of processors (#57); `Settings` in the component
+  diagram (#61)
 - Russian version: [ADR-0004](ru/0004-bounded-executor.md)
 
 ## Context
@@ -58,7 +59,8 @@ C4Component
     Person(user, "User", "run.sh or docker compose")
     System_Ext(etsi, "www.etsi.org", "Listings and documents of /deliver/")
     Container_Boundary(app, "etsiorg-downloader, JVM") {
-        Component(main, "Main", "Java", "Settings -Duri, -Ddest, -Dthreads; thread pool; summary")
+        Component(main, "Main", "Java", "Arguments, thread pool, summary, exit status")
+        Component(settings, "Settings", "Java", "System properties, ETSIORG_* variables, defaults")
         Component(policy, "LinkPolicy", "Java", "Accepted links, visited resources")
         Component(factory, "ComplexProcessorFactory", "Java", "Choice of the resource processor")
         Component(html, "TextHtmlProcessor", "Java", "Listing parsing, version choice, children in the pool")
@@ -69,6 +71,7 @@ C4Component
     }
     ContainerDb(fs, "Destination folder", "File system", "Mirror deliver/...")
     Rel(user, main, "Starts")
+    Rel(main, settings, "Settings of the run")
     Rel(main, factory, "Root of the crawl")
     Rel(factory, html, "Folder")
     Rel(factory, file, "File")

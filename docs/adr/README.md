@@ -18,3 +18,4 @@ and the decision is added to both indexes.
 | [0010](0010-maven-wrapper.md) | Build with the Maven Wrapper and the project settings | [0010](ru/0010-maven-wrapper.md) |
 | [0011](0011-jpms-module.md) | The downloader is a named module (JPMS) | [0011](ru/0011-jpms-module.md) |
 | [0012](0012-continuous-integration.md) | Build and test every change on GitHub Actions | [0012](ru/0012-continuous-integration.md) |
+| [0013](0013-settings-sources.md) | Settings — a system property, otherwise an environment variable, otherwise the default | [0013](ru/0013-settings-sources.md) |

@@ -2,7 +2,8 @@
 
 - Статус: Принято
 - Дата: 2026-10-30
-- Изменено: 2026-10-30 — по умолчанию 4 потока вместо числа процессоров (#57)
+- Изменено: 2026-10-30 — по умолчанию 4 потока вместо числа процессоров (#57); `Settings` на диаграмме компонентов
+  (#61)
 - Версия на английском: [ADR-0004](../0004-bounded-executor.md)
 
 ## Контекст
@@ -57,7 +58,8 @@ C4Component
     Person(user, "Пользователь", "run.sh или docker compose")
     System_Ext(etsi, "www.etsi.org", "Листинги и документы /deliver/")
     Container_Boundary(app, "etsiorg-downloader, JVM") {
-        Component(main, "Main", "Java", "Настройки -Duri, -Ddest, -Dthreads; пул потоков; итог")
+        Component(main, "Main", "Java", "Аргументы, пул потоков, итог, код завершения")
+        Component(settings, "Settings", "Java", "Системные свойства, переменные ETSIORG_*, значения по умолчанию")
         Component(policy, "LinkPolicy", "Java", "Допустимые ссылки, посещённые ресурсы")
         Component(factory, "ComplexProcessorFactory", "Java", "Выбор обработчика ресурса")
         Component(html, "TextHtmlProcessor", "Java", "Разбор листинга, выбор версии, обход детей в пуле")
@@ -68,6 +70,7 @@ C4Component
     }
     ContainerDb(fs, "Папка назначения", "Файловая система", "Зеркало deliver/...")
     Rel(user, main, "Запускает")
+    Rel(main, settings, "Настройки прогона")
     Rel(main, factory, "Корень обхода")
     Rel(factory, html, "Папка")
     Rel(factory, file, "Файл")

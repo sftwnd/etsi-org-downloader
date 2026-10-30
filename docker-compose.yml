@@ -6,6 +6,11 @@ services:
       context: ./
     image: sftwnd/etsi-org:1.0
     hostname: etsiorg-downloader
+    environment:
+      # the settings of the downloader, if they are set in the environment of docker compose or in .env
+      - ETSIORG_URI
+      - ETSIORG_THREADS
+      - ETSIORG_ZONE
     read_only: true
     tmpfs:
       - /tmp
