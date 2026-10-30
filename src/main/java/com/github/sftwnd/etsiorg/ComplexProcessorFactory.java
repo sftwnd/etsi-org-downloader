@@ -28,11 +28,11 @@ public class ComplexProcessorFactory implements ProcessorFactory<CompletableFutu
 
     public ComplexProcessorFactory(@NonNull Destination destination,
                                    @NonNull LinkPolicy linkPolicy,
-                                   @Nullable Executor executor,
+                                   @NonNull Executor executor,
                                    @Nullable Consumer<Collection<URI>> onExpires) {
         this.destination = Objects.requireNonNull(destination, "ComplexProcessorFactory::new - destination is null");
         this.linkPolicy = Objects.requireNonNull(linkPolicy, "ComplexProcessorFactory::new - linkPolicy is null");
-        this.executor = executor;
+        this.executor = Objects.requireNonNull(executor, "ComplexProcessorFactory::new - executor is null");
         this.onExpires = onExpires;
     }
 

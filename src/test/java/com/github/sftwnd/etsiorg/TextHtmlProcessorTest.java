@@ -25,8 +25,12 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -85,8 +89,31 @@ class TextHtmlProcessorTest extends AbstractFileSourceTest {
     @SuppressWarnings("unchecked")
     void textHtmlProcessorTest() {
         assertDoesNotThrow(
-                () -> new TextHtmlProcessor(mock(Page.class), mock(ProcessorFactory.class), LINK_POLICY, null, null)
+                () -> new TextHtmlProcessor(mock(Page.class), mock(ProcessorFactory.class), LINK_POLICY, DIRECT, null)
         );
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void textHtmlProcessorExecutorNull() {
+        assertThrows(
+                NullPointerException.class,
+                () -> new TextHtmlProcessor(mock(Page.class), mock(ProcessorFactory.class), LINK_POLICY, this.<Executor>nullRef().get(), null)
+        );
+    }
+
+    @Test
+    void childrenRunOnExecutorTest() throws Exception {
+        startUp("non-version");
+        ExecutorService executor = Executors.newSingleThreadExecutor(runnable -> new Thread(runnable, "test-pool"));
+        try {
+            new TextHtmlProcessor(this.page, this.processorFactory, new LinkPolicy(URI.create("http://localhost/deliver/")), executor, this.onExpires)
+                    .process()
+                    .get(10, TimeUnit.SECONDS);
+        } finally {
+            executor.shutdownNow();
+        }
+        assertEquals(Set.of("test-pool"), Set.copyOf(((FooProcessorFactory) this.processorFactory).threads));
     }
 
     @Test
@@ -225,7 +252,7 @@ class TextHtmlProcessorTest extends AbstractFileSourceTest {
     }
 
     private @NonNull TextHtmlProcessor textHtmlProcessor(@NonNull Page page) {
-        return new TextHtmlProcessor(page, this.processorFactory, new LinkPolicy(URI.create("http://localhost/deliver/")), null, this.onExpires);
+        return new TextHtmlProcessor(page, this.processorFactory, new LinkPolicy(URI.create("http://localhost/deliver/")), DIRECT, this.onExpires);
     }
 
     @AfterEach
@@ -244,11 +271,13 @@ class TextHtmlProcessorTest extends AbstractFileSourceTest {
     static class FooProcessorFactory implements ProcessorFactory<CompletableFuture<Stream<Path>>> {
 
         final List<HREF> processed = Collections.synchronizedList(new ArrayList<>());
+        final List<String> threads = Collections.synchronizedList(new ArrayList<>());
 
         @NonNull
         @Override
         public Processor<CompletableFuture<Stream<Path>>> processor(@NonNull Page page) {
             processed.add(page.getHref());
+            threads.add(Thread.currentThread().getName());
             return new FooProcessor(page.path());
         }
     }
@@ -371,6 +400,7 @@ class TextHtmlProcessorTest extends AbstractFileSourceTest {
             .collect(Collectors.toList());
 
     private static final LinkPolicy LINK_POLICY = new LinkPolicy(URI.create("http://localhost/deliver/"));
+    private static final Executor DIRECT = Runnable::run;
 
     private static final Map<String, Collection<Path>> RESULTS_MAP = Map.of(
             "files-paths", FILES_PATHS,

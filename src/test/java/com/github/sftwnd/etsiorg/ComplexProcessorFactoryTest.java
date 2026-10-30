@@ -70,6 +70,11 @@ class ComplexProcessorFactoryTest {
     }
 
     @Test
+    void nullExecutorConstructorTest() {
+        assertThrows(NullPointerException.class, () -> new ComplexProcessorFactory(this.destination, this.linkPolicy, null, this.onExpires));
+    }
+
+    @Test
     void nullLinkPolicyConstructorTest() {
         assertThrows(NullPointerException.class, () -> new ComplexProcessorFactory(this.destination, null, this.executor, this.onExpires));
     }

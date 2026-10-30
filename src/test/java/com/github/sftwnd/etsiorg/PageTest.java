@@ -174,6 +174,29 @@ class PageTest {
     }
 
     @Test
+    void userAgentTest() throws Exception {
+        Collection<String> userAgents = new ConcurrentLinkedQueue<>();
+        HttpServer server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+        server.createContext("/", exchange -> {
+            userAgents.add(String.valueOf(exchange.getRequestHeaders().getFirst("User-Agent")));
+            exchange.sendResponseHeaders(HttpURLConnection.HTTP_OK, CONTENT.length);
+            try (OutputStream outputStream = exchange.getResponseBody()) {
+                outputStream.write(CONTENT);
+            }
+        });
+        server.start();
+        try {
+            try (InputStream inputStream = Page.of(href(uri(server.getAddress().getPort())), SETTINGS).inputStream()) {
+                inputStream.readAllBytes();
+            }
+            assertEquals(List.of(Page.USER_AGENT), List.copyOf(userAgents));
+            assertTrue(Page.USER_AGENT.startsWith("etsiorg-downloader "));
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
     void charsetTest() throws Exception {
         assertEquals(Charset.forName("windows-1251"), charsetOf("text/html; charset=windows-1251"));
         assertEquals(StandardCharsets.ISO_8859_1, charsetOf("text/html;Charset=\"ISO-8859-1\""));

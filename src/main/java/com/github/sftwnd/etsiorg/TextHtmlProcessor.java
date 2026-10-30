@@ -47,20 +47,21 @@ public class TextHtmlProcessor implements Processor<CompletableFuture<Stream<Pat
      * @param page text/html reference
      * @param processorFactory factory for processor resource
      * @param linkPolicy policy of the links to follow
-     * @param executor executor for the async execution
+     * @param executor executor of the resource processing: listings and downloads run in its threads
      * @param onExpires listener for the expired resources
      */
     TextHtmlProcessor(@NonNull Page page,
                       @NonNull ProcessorFactory<CompletableFuture<Stream<Path>>> processorFactory,
                       @NonNull LinkPolicy linkPolicy,
-                      @Nullable Executor executor,
+                      @NonNull Executor executor,
                       @Nullable Consumer<Collection<URI>> onExpires) {
         this.page = Objects.requireNonNull(page, "TextHtmlProcessor::new - page is null");
         this.processorFactory = Objects.requireNonNull(processorFactory, "TextHtmlProcessor::new - processorFactory is null");
         this.linkPolicy = Objects.requireNonNull(linkPolicy, "TextHtmlProcessor::new - linkPolicy is null");
-        this.executor = executor;
+        this.executor = Objects.requireNonNull(executor, "TextHtmlProcessor::new - executor is null");
         this.onExpires = onExpires;
     }
+
     /**
      * Process file with content or references recursively to load the tree of files
      * @return Stream of loaded file paths
@@ -73,9 +74,8 @@ public class TextHtmlProcessor implements Processor<CompletableFuture<Stream<Pat
             var result = swap(
                     parseFile(page)
                             .map(href -> CompletableFuture
-                                    .supplyAsync(() -> Page.of(href))
-                                    .thenApply(this.getProcessorFactory()::processor)
-                                    .thenCompose(Processor::process)));
+                                    .supplyAsync(() -> this.getProcessorFactory().processor(Page.of(href)).process(), this.getExecutor())
+                                    .thenCompose(Function.identity())));
             logger.trace("Text/html page has been processed: '{}'", Printable.of(page.path()));
             return result;
         } catch (IOException ioex) {
@@ -95,10 +95,7 @@ public class TextHtmlProcessor implements Processor<CompletableFuture<Stream<Pat
     ) {
         @SuppressWarnings("unchecked")
         CompletableFuture<Stream<X>>[] futures = (CompletableFuture<Stream<X>>[])futureCollection.toArray(size -> new CompletableFuture<?>[size]);
-        Function<? super Void, Stream<X>> swapAsync = ignore -> Arrays.stream(futures).flatMap(CompletableFuture::join);
-        return getExecutor() == null
-                ? CompletableFuture.allOf(futures).thenApplyAsync(swapAsync)
-                : CompletableFuture.allOf(futures).thenApplyAsync(swapAsync, getExecutor());
+        return CompletableFuture.allOf(futures).thenApply(ignore -> Arrays.stream(futures).flatMap(CompletableFuture::join));
     }
 
     /*
