@@ -2,8 +2,9 @@
 
 # Build stage: the Maven Wrapper downloads the Maven of the project and checks the SHA-256 of its zip distribution.
 # unzip is required: without it mvnw takes the tar.gz distribution, which does not match the checksum.
-# The jar is packaged without the tests: they run in continuous integration (.github/workflows/build.yml)
-FROM eclipse-temurin:11-jdk AS build
+# The jar is packaged without the tests: they run in continuous integration (.github/workflows/build.yml).
+# The base images are pinned by the digests of their multi-platform indexes; Dependabot updates them
+FROM eclipse-temurin:11-jdk@sha256:810d03ef723872693a38e5c1367cc88a0bee58edcf06a2ab868ccc048888db73 AS build
 RUN apt-get update \
  && apt-get install -y --no-install-recommends unzip \
  && rm -rf /var/lib/apt/lists/*
@@ -22,7 +23,7 @@ RUN jlink --module-path "$(ls target/etsiorg-downloader-*.jar | grep -v -- -jar-
  && mkdir /data
 
 # Runtime stage: the runtime on a minimal system with glibc and without a shell, run by its user nonroot (65532)
-FROM gcr.io/distroless/base-debian12
+FROM gcr.io/distroless/base-debian12@sha256:fabbf1c0c357a3d42550111351daed089b20a2c954df13ee2fcff60602515e84
 # The version is not a label: it is set in pom.xml only, and the downloader reports the version of its module
 LABEL org.opencontainers.image.title="etsiorg-downloader" \
       org.opencontainers.image.description="Mirrors the document tree of ETSI, www.etsi.org/deliver, to a local folder" \
