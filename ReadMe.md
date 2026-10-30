@@ -150,6 +150,11 @@ docker rmi sftwnd/etsiorg-downloader
 The image `sftwnd/etsiorg-downloader` is built from the sources at hand, so it has no version tag: the downloader logs
 its version at the start and prints it with `--help`.
 
+## Scheduled runs
+
+A mirror is kept up to date by a regular run. [docs/scheduling.md](docs/scheduling.md) has the examples for cron,
+a systemd timer and a Kubernetes CronJob and the reaction to every exit status.
+
 ## Architecture
 
 The architecture decisions are recorded in [docs/adr](docs/adr/README.md) in English and in Russian
