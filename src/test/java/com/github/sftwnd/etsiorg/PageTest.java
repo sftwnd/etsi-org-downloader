@@ -15,10 +15,13 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.SocketTimeoutException;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -28,6 +31,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
@@ -35,6 +39,7 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.mock;
@@ -115,6 +120,141 @@ class PageTest {
             assertEquals("Unable to open HTTP connection: HTTP/1.1 403 Forbidden\\u001B[2J", exception.getMessage());
             server.join(5_000L);
         }
+    }
+
+    @Test
+    void readTimeoutTest() throws Exception {
+        try (ServerSocket serverSocket = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
+            Page page = Page.of(href(uri(serverSocket.getLocalPort())),
+                    new HttpSettings(Duration.ofSeconds(2), Duration.ofMillis(200), 1, Duration.ZERO));
+            long start = System.nanoTime();
+            assertThrows(SocketTimeoutException.class, page::inputStream);
+            assertTrue(Duration.ofNanos(System.nanoTime() - start).compareTo(Duration.ofSeconds(5)) < 0);
+        }
+    }
+
+    @Test
+    void retryTransientStatusTest() throws Exception {
+        assertResponses(List.of(HttpURLConnection.HTTP_UNAVAILABLE, HttpURLConnection.HTTP_OK), 2,
+                page -> assertArrayEquals(CONTENT, page.inputStream().readAllBytes()));
+    }
+
+    @Test
+    void attemptsAreLimitedTest() throws Exception {
+        assertResponses(List.of(HttpURLConnection.HTTP_INTERNAL_ERROR), 3, page -> {
+            IOException exception = assertThrows(IOException.class, page::inputStream);
+            assertTrue(exception.getMessage().contains("500"), exception.getMessage());
+        });
+    }
+
+    @Test
+    void clientErrorIsNotRetriedTest() throws Exception {
+        assertResponses(List.of(HttpURLConnection.HTTP_NOT_FOUND), 1, page -> assertThrows(IOException.class, page::inputStream));
+    }
+
+    @Test
+    void reconnectAfterFailureTest() throws Exception {
+        assertResponses(List.of(HttpURLConnection.HTTP_NOT_FOUND, HttpURLConnection.HTTP_OK), 2, page -> {
+            assertThrows(IOException.class, page::inputStream);
+            assertArrayEquals(CONTENT, page.inputStream().readAllBytes());
+        });
+    }
+
+    @Test
+    void retryAfterTest() throws Exception {
+        HttpServer server = server(List.of(HttpURLConnection.HTTP_UNAVAILABLE, HttpURLConnection.HTTP_OK), "text/plain", "1", new AtomicInteger());
+        try {
+            Page page = Page.of(href(uri(server.getAddress().getPort())), SETTINGS);
+            long start = System.nanoTime();
+            assertArrayEquals(CONTENT, page.inputStream().readAllBytes());
+            assertTrue(Duration.ofNanos(System.nanoTime() - start).compareTo(Duration.ofMillis(900)) >= 0);
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    void charsetTest() throws Exception {
+        assertEquals(Charset.forName("windows-1251"), charsetOf("text/html; charset=windows-1251"));
+        assertEquals(StandardCharsets.ISO_8859_1, charsetOf("text/html;Charset=\"ISO-8859-1\""));
+        assertEquals(StandardCharsets.UTF_8, charsetOf("text/html"));
+        assertEquals(StandardCharsets.UTF_8, charsetOf("text/html; charset=unknown-charset"));
+        assertEquals(StandardCharsets.UTF_8, Page.of(href(uri(1))).charset());
+    }
+
+    @Test
+    void notHttpResourceTest() {
+        Page page = Page.of(href(URI.create("file:///etc/passwd")));
+        IOException exception = assertThrows(IOException.class, page::inputStream);
+        assertTrue(exception.getMessage().startsWith("Resource is not available over HTTP"), exception.getMessage());
+    }
+
+    @Test
+    void invalidSettingsTest() {
+        assertThrows(IllegalArgumentException.class, () -> new HttpSettings(Duration.ZERO, Duration.ofSeconds(1), 1, Duration.ZERO));
+        assertThrows(IllegalArgumentException.class, () -> new HttpSettings(Duration.ofSeconds(1), Duration.ofSeconds(-1), 1, Duration.ZERO));
+        assertThrows(IllegalArgumentException.class, () -> new HttpSettings(Duration.ofSeconds(1), Duration.ofSeconds(1), 0, Duration.ZERO));
+        assertThrows(IllegalArgumentException.class, () -> new HttpSettings(Duration.ofSeconds(1), Duration.ofSeconds(1), 1, Duration.ofSeconds(-1)));
+    }
+
+    private interface PageAssertion {
+        void accept(Page page) throws Exception;
+    }
+
+    private static final byte[] CONTENT = "0123456789abcdefghijklmnopqrstuvwxyz".getBytes(StandardCharsets.US_ASCII);
+    private static final HttpSettings SETTINGS = new HttpSettings(Duration.ofSeconds(2), Duration.ofSeconds(2), 3, Duration.ofMillis(10));
+
+    private void assertResponses(List<Integer> codes, int expectedRequests, PageAssertion assertion) throws Exception {
+        AtomicInteger requests = new AtomicInteger();
+        HttpServer server = server(codes, "text/plain", null, requests);
+        try {
+            assertion.accept(Page.of(href(uri(server.getAddress().getPort())), SETTINGS));
+            assertEquals(expectedRequests, requests.get());
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    private Charset charsetOf(String contentType) throws Exception {
+        HttpServer server = server(List.of(HttpURLConnection.HTTP_OK), contentType, null, new AtomicInteger());
+        try {
+            Page page = Page.of(href(uri(server.getAddress().getPort())), SETTINGS);
+            try (InputStream inputStream = page.inputStream()) {
+                inputStream.readAllBytes();
+            }
+            return page.charset();
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    /**
+     * Local server that answers with the codes in turn, the last code is repeated
+     */
+    private static HttpServer server(List<Integer> codes, String contentType, String retryAfter, AtomicInteger requests) throws IOException {
+        HttpServer server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+        server.createContext("/", exchange -> {
+            int code = codes.get(Math.min(requests.getAndIncrement(), codes.size() - 1));
+            exchange.getResponseHeaders().add("Content-Type", contentType);
+            if (retryAfter != null && code != HttpURLConnection.HTTP_OK) {
+                exchange.getResponseHeaders().add("Retry-After", retryAfter);
+            }
+            byte[] body = code == HttpURLConnection.HTTP_OK ? CONTENT : new byte[0];
+            exchange.sendResponseHeaders(code, body.length == 0 ? -1 : body.length);
+            try (OutputStream outputStream = exchange.getResponseBody()) {
+                outputStream.write(body);
+            }
+        });
+        server.start();
+        return server;
+    }
+
+    private static URI uri(int port) {
+        return URI.create("http://" + InetAddress.getLoopbackAddress().getHostAddress() + ":" + port + "/file.pdf");
+    }
+
+    private static HREF href(URI uri) {
+        return HREF.builder().uri(uri).bytes((long) CONTENT.length).dateTime(LocalDateTime.now()).build();
     }
 
     @Test
