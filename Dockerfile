@@ -20,6 +20,8 @@ RUN groupadd --system --gid 10001 etsiorg \
  && mkdir -p /data \
  && chown etsiorg:etsiorg /data
 WORKDIR /opt/etsiorg
+# The log of a container is read by docker logs and log collectors, not in a terminal: no colors (https://no-color.org)
+ENV NO_COLOR=1
 COPY --from=build /build/target/etsiorg-downloader-*-jar-with-dependencies.jar etsiorg-downloader.jar
 COPY src/main/resources/logback.xml logback.xml
 USER etsiorg

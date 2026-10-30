@@ -62,6 +62,9 @@ It starts the jar with the JDK the Maven Wrapper builds it with: `$JAVA_HOME/bin
 | `-Dthreads` | number of processors            | Threads that process listings and files, i.e. simultaneous requests  |
 | `-Dzone`    | `UTC`                           | Time zone of the listing time; www.etsi.org lists it in UTC          |
 
+The log is colored for a terminal. As [no-color.org](https://no-color.org) suggests, `NO_COLOR` set to a non-empty value
+turns the colors off, e.g. for a log written to a file: `NO_COLOR=1 ./run.sh > mirror.log`.
+
 The jars can also be started directly; the logging configuration is not packed into them and is passed explicitly.
 The fat jar on the class path:
 
@@ -95,7 +98,8 @@ docker compose up --build
 The image is built from the sources with `./mvnw` without the tests, which run in continuous integration, and runs
 the downloader as a non-root user (UID 10001) with a read-only file system; only `./deliver` is mounted, and the mirror
 is stored there. On Linux create the folder and make it writable for the user before the first start,
-e.g. `mkdir -p deliver && sudo chown 10001 deliver`.
+e.g. `mkdir -p deliver && sudo chown 10001 deliver`. The log of the container is not colored: the image sets
+`NO_COLOR=1`.
 
 Properties are passed with `JDK_JAVA_OPTIONS`:
 
