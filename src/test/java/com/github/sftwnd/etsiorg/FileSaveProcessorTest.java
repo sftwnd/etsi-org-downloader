@@ -1,17 +1,19 @@
 package com.github.sftwnd.etsiorg;
 
-import lombok.SneakyThrows;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.SocketTimeoutException;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.Arrays;
@@ -19,78 +21,151 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.mock;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class FileSaveProcessorTest extends AbstractFileSourceTest {
 
-    @Test
-    void processPathCheckTest() {
-        var future = this.fileSaveProcessor.process();
-        assertTrue(future::isDone);
-        assertDoesNotThrow(future::join);
-        assertEquals(List.of(tempFile.toAbsolutePath()), future.join().collect(Collectors.toList()));
-    }
+    private static final String FILE = "deliver/etsi_ts/129000_129099/129078/17.00.00_60/ts_129078v170000p.pdf";
+
+    @TempDir
+    Path tempDir;
 
     @Test
-    void processOutsideDestinationTest() {
-        Path outside = root().resolve("..").resolve(tempFile.getFileName()).toAbsolutePath().normalize();
-        when(this.href.getUri()).thenReturn(URI.create("http://localhost/../" + tempFile.getFileName()));
-        assertEquals(List.of(), this.fileSaveProcessor.process().join().collect(Collectors.toList()));
-        assertTrue(Files.notExists(outside));
-    }
-
-    @Test
-    void processFileContentTest() throws IOException {
-        Path path = this.fileSaveProcessor.process().join().findFirst().orElse(null);
-        assertNotNull(path);
-        assertEquals(this.bytes, Files.size(path));
-        int fileSize = Long.valueOf(bytes).intValue();
-        byte[] buff = new byte[fileSize];
-        try (InputStream is = Files.newInputStream(path)) {
-            assertEquals(fileSize, is.read(buff));
-        }
-        assertEquals(0, Arrays.compare(this.buff, 0, fileSize, buff, 0, fileSize));
-    }
-
-    @Test
-    void processResumeFileContentTest() throws IOException {
-        int fileSize = Long.valueOf(this.bytes).intValue();
-        int offset = fileSize / 2;
-        Files.write(this.tempFile, Arrays.copyOf(this.buff, offset));
-        when(this.page.inputStreamFrom(offset)).thenReturn(new ByteArrayInputStream(this.buff, offset, fileSize - offset));
-        Path path = this.fileSaveProcessor.process().join().findFirst().orElse(null);
-        assertNotNull(path);
-        assertArrayEquals(Arrays.copyOf(this.buff, fileSize), Files.readAllBytes(path));
+    void downloadTest() throws IOException {
+        assertEquals(List.of(this.target), process());
+        assertArrayEquals(content(), Files.readAllBytes(this.target));
+        assertTrue(Files.notExists(this.part));
     }
 
     @Test
     void listingTimeIsUtcTest() throws IOException {
-        Path path = this.fileSaveProcessor.process().join().findFirst().orElseThrow();
-        assertEquals(this.dateTime.toInstant(ZoneOffset.UTC), Files.getLastModifiedTime(path).toInstant());
+        process();
+        assertEquals(this.dateTime.toInstant(ZoneOffset.UTC), Files.getLastModifiedTime(this.target).toInstant());
     }
 
     @Test
     void listingTimeZoneTest() throws IOException {
         ZoneId zone = ZoneId.of("Europe/Moscow");
-        when(this.fileSaveProcessor.getZone()).thenReturn(zone);
-        Path path = this.fileSaveProcessor.process().join().findFirst().orElseThrow();
-        assertEquals(this.dateTime.atZone(zone).toInstant(), Files.getLastModifiedTime(path).toInstant());
+        this.processor = new FileSaveProcessor(new Destination(root()), zone, this.page);
+        process();
+        assertEquals(this.dateTime.atZone(zone).toInstant(), Files.getLastModifiedTime(this.target).toInstant());
     }
 
     @Test
-    void processInterruptedDownloadTest() throws IOException {
-        int fileSize = Long.valueOf(this.bytes).intValue();
-        int offset = fileSize / 3;
+    void resumePartTest() throws IOException {
+        int offset = length() / 2;
+        Files.createDirectories(this.part.getParent());
+        Files.write(this.part, Arrays.copyOf(this.buff, offset));
+        when(this.page.inputStreamFrom(offset)).thenReturn(new ByteArrayInputStream(this.buff, offset, length() - offset));
+        assertEquals(List.of(this.target), process());
+        assertArrayEquals(content(), Files.readAllBytes(this.target));
+        assertTrue(Files.notExists(this.part));
+    }
+
+    @Test
+    void interruptedDownloadIsResumedTest() throws IOException {
+        int offset = length() / 3;
         when(this.page.inputStreamFrom(0L)).thenReturn(new FailingInputStream(this.buff, offset));
-        when(this.page.inputStreamFrom(offset)).thenReturn(new ByteArrayInputStream(this.buff, offset, fileSize - offset));
-        Path path = this.fileSaveProcessor.process().join().findFirst().orElse(null);
-        assertNotNull(path);
-        assertArrayEquals(Arrays.copyOf(this.buff, fileSize), Files.readAllBytes(path));
+        when(this.page.inputStreamFrom(offset)).thenReturn(new ByteArrayInputStream(this.buff, offset, length() - offset));
+        assertEquals(List.of(this.target), process());
+        assertArrayEquals(content(), Files.readAllBytes(this.target));
+    }
+
+    @Test
+    void failedDownloadKeepsPartTest() throws IOException {
+        int offset = length() / 3;
+        when(this.page.inputStreamFrom(0L)).thenReturn(new FailingInputStream(this.buff, offset));
+        when(this.page.inputStreamFrom(offset)).thenReturn(new ByteArrayInputStream(new byte[0]));
+        assertEquals(List.of(), process());
+        assertTrue(Files.notExists(this.target));
+        assertArrayEquals(Arrays.copyOf(this.buff, offset), Files.readAllBytes(this.part));
+    }
+
+    @Test
+    void failedDownloadKeepsExistingFileTest() throws IOException {
+        byte[] old = "old content".getBytes(StandardCharsets.US_ASCII);
+        Files.createDirectories(this.target.getParent());
+        Files.write(this.target, old);
+        when(this.page.inputStreamFrom(0L)).thenReturn(new FailingInputStream(this.buff, 0));
+        assertEquals(List.of(), process());
+        assertArrayEquals(old, Files.readAllBytes(this.target));
+    }
+
+    @Test
+    void fileOfAnotherSizeIsReplacedTest() throws IOException {
+        Files.createDirectories(this.target.getParent());
+        Files.write(this.target, "old content".getBytes(StandardCharsets.US_ASCII));
+        assertEquals(List.of(this.target), process());
+        assertArrayEquals(content(), Files.readAllBytes(this.target));
+    }
+
+    @Test
+    void upToDateFileIsKeptTest() throws IOException {
+        byte[] local = new byte[length()];
+        Files.createDirectories(this.target.getParent());
+        Files.write(this.target, local);
+        Files.setLastModifiedTime(this.target, FileTime.from(this.dateTime.toInstant(ZoneOffset.UTC)));
+        clearInvocations(this.page);
+        assertEquals(List.of(this.target), process());
+        assertArrayEquals(local, Files.readAllBytes(this.target));
+        verify(this.page, never()).inputStreamFrom(anyLong());
+    }
+
+    @Test
+    void longerPartIsDiscardedTest() throws IOException {
+        Files.createDirectories(this.part.getParent());
+        Files.write(this.part, new byte[length() + 1]);
+        assertEquals(List.of(this.target), process());
+        assertArrayEquals(content(), Files.readAllBytes(this.target));
+    }
+
+    @Test
+    void directoryIsNotReplacedTest() throws IOException {
+        Path file = Files.createDirectories(this.target).resolve("file.txt");
+        Files.writeString(file, "keep me");
+        assertEquals(List.of(), process());
+        assertTrue(Files.isDirectory(this.target));
+        assertTrue(Files.exists(file));
+    }
+
+    @Test
+    void outsideDestinationTest() {
+        when(this.href.getUri()).thenReturn(URI.create("http://localhost/../outside.pdf"));
+        assertEquals(List.of(), process());
+        assertTrue(Files.notExists(this.tempDir.resolve("outside.pdf")));
+    }
+
+    @Override
+    Path root() {
+        return this.tempDir.resolve("mirror");
+    }
+
+    @Override
+    URI uri() {
+        return URI.create("http://localhost/" + FILE);
+    }
+
+    @Override
+    Path path() {
+        return Path.of("/" + FILE);
+    }
+
+    private List<Path> process() {
+        return this.processor.process().join().collect(Collectors.toList());
+    }
+
+    private int length() {
+        return Long.valueOf(this.bytes).intValue();
+    }
+
+    private byte[] content() {
+        return Arrays.copyOf(this.buff, length());
     }
 
     /**
@@ -125,61 +200,25 @@ class FileSaveProcessorTest extends AbstractFileSourceTest {
         }
     }
 
-    private FileSaveProcessor fileSaveProcessor;
-
-    private final static String TEMPDIR_BASE = "target/fileSaveProcessorTest.test";
-    Path tempDir;
-    Path tempFile;
-
-    @Override
-    Path root() {
-        return tempDir.getParent();
-    }
-
-    @Override
-    Path path() {
-        return Path.of(tempDir.getFileName().toString(), tempFile.getFileName().toString());
-    }
-
-    @Override
-    Path fileName() {
-        return tempFile.getFileName();
-    }
-
-    @Override
-    URI uri() {
-        return URI.create("http://localhost/" + tempDir.getFileName() + "/" + tempFile.getFileName());
-    }
-
     @BeforeEach
     void startUp() throws IOException {
-        this.tempDir = Files.createDirectories(Path.of(TEMPDIR_BASE));
-        this.tempFile = Files.createTempFile(tempDir, "fileName", "data");
-
         super.startUp(null);
-
-        this.fileSaveProcessor = mock(FileSaveProcessor.class);
-        when(this.fileSaveProcessor.getPage()).thenReturn(this.page);
-        when(this.fileSaveProcessor.getDestination()).thenReturn(new Destination(root()));
-        when(this.fileSaveProcessor.getZone()).thenReturn(ZoneOffset.UTC);
-        when(this.fileSaveProcessor.process()).thenCallRealMethod();
+        this.target = root().resolve(FILE).toAbsolutePath();
+        this.part = this.target.resolveSibling(this.target.getFileName() + FileSaveProcessor.PART_SUFFIX);
+        this.processor = new FileSaveProcessor(new Destination(root()), ZoneOffset.UTC, this.page);
     }
 
     @AfterEach
     @Override
-    @SneakyThrows
     void tearDown() {
-        try {
-            Files.delete(this.tempFile);
-        } finally {
-            try {
-                Files.delete(this.tempDir);
-            } finally {
-                this.tempFile = null;
-                this.tempDir = null;
-                super.tearDown();
-            }
-        }
+        this.target = null;
+        this.part = null;
+        this.processor = null;
+        super.tearDown();
     }
+
+    private FileSaveProcessor processor;
+    private Path target;
+    private Path part;
 
 }
