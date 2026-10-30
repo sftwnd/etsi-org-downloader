@@ -2,6 +2,8 @@ package com.github.sftwnd.etsiorg;
 
 import edu.umd.cs.findbugs.annotations.NonNull;
 import edu.umd.cs.findbugs.annotations.Nullable;
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
@@ -14,9 +16,11 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedList;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -70,17 +74,32 @@ public class TextHtmlProcessor implements Processor<CompletableFuture<Summary>> 
         final Page page = this.getPage();
         logger.debug("Start text/html process: '{}'", Printable.of(page.path()));
         try {
-            var result = sum(
-                    parseFile(page)
-                            .map(href -> CompletableFuture
-                                    .supplyAsync(() -> this.getProcessorFactory().processor(Page.of(href)).process(), this.getExecutor())
-                                    .thenCompose(Function.identity())));
+            Listing listing = parseFile(page);
+            var result = sum(listing.getHrefs().stream().filter(this::firstVisit).map(this::processChild))
+                    .thenApply(summary -> summary.plus(Summary.failed(listing.getInvalid())));
             logger.trace("Text/html page has been processed: '{}'", Printable.of(page.path()));
             return result;
-        } catch (IOException ioex) {
-            logger.error("Unable to process text/html page: '{}'. Cause[{}]: {}", Printable.of(page.path()), ioex.getClass().getSimpleName(), Printable.of(ioex.getMessage()));
-            return CompletableFuture.completedFuture(Summary.EMPTY);
+        } catch (IOException | RuntimeException exception) {
+            logger.error("Unable to process text/html page: '{}'. Cause[{}]: {}", Printable.of(page.path()), exception.getClass().getSimpleName(), Printable.of(exception.getMessage()));
+            return CompletableFuture.completedFuture(Summary.FAILED);
         }
+    }
+
+    /**
+     * Process the child resource as a task of the executor. Any failure of the child is reported and becomes its failed
+     * summary, so it does not affect the other resources
+     * @param href reference to the child resource
+     * @return summary of the child
+     */
+    private @NonNull CompletableFuture<Summary> processChild(@NonNull HREF href) {
+        return CompletableFuture
+                .supplyAsync(() -> this.getProcessorFactory().processor(Page.of(href)).process(), this.getExecutor())
+                .thenCompose(Function.identity())
+                .exceptionally(throwable -> {
+                    Throwable cause = throwable instanceof CompletionException && throwable.getCause() != null ? throwable.getCause() : throwable;
+                    logger.error("Unable to process: '{}'. Cause: {} {}", Printable.of(href.path()), cause.getClass().getSimpleName(), Printable.of(cause.getMessage()));
+                    return Summary.FAILED;
+                });
     }
 
     /**
@@ -167,38 +186,25 @@ public class TextHtmlProcessor implements Processor<CompletableFuture<Summary>> 
      * @param page Page description to load
      * @return list of uri to load
      */
-    private @NonNull Stream<HREF> parseFile(@NonNull Page page) throws IOException {
+    private @NonNull Listing parseFile(@NonNull Page page) throws IOException {
         String listing = loadFile(page);
         Matcher matcher = REF_PATTERN.matcher(listing);
-        Collection<HREF> hrefs = new LinkedList<>();
+        List<HREF> hrefs = new LinkedList<>();
         Collection<HREF> versionedHrefs = new LinkedList<>();
         long entries = 0;
+        long invalid = 0;
         while (matcher.find()) {
             entries++;
-            boolean folder = matcher.group(8) != null;
-            URI uri = page.getUri().resolve(Html.unescape(matcher.group(9)));
-            if (!this.getLinkPolicy().accepts(uri)) {
-                logger.warn("Link is outside of the mirrored folder and is skipped: '{}'", Printable.of(uri));
-                continue;
+            try {
+                HREF href = parseEntry(page, matcher);
+                if (href != null) {
+                    (href.isVersioned() ? versionedHrefs : hrefs).add(href);
+                    logger.trace("Found {}: {}", href.isRegularFile() ? "file" : "path", Printable.of(href));
+                }
+            } catch (RuntimeException rex) {
+                invalid++;
+                logger.warn("Listing entry is skipped: '{}'. Cause: {} {}", Printable.of(matcher.group()), rex.getClass().getSimpleName(), Printable.of(rex.getMessage()));
             }
-            if (folder && !uri.getRawPath().endsWith("/")) {
-                uri = URI.create(uri + "/");
-            }
-            HREF href = HREF.builder()
-                    .uri(uri)
-                    .bytes(Optional.ofNullable(matcher.group(7))
-                            .filter(Predicate.not(String::isBlank))
-                            .map(Long::parseLong).orElse(null))
-                    .dateTime(LocalDateTime.of(
-                            Integer.parseInt(matcher.group(3)),
-                            Integer.parseInt(matcher.group(1)),
-                            Integer.parseInt(matcher.group(2)),
-                            Integer.parseInt(matcher.group(4)) % 12 + ("P".equalsIgnoreCase(matcher.group(6)) ? 12 : 0),
-                            Integer.parseInt(matcher.group(5))))
-                    .regularFile(!folder)
-                    .build();
-            (href.isVersioned() ? versionedHrefs : hrefs).add(href);
-            logger.trace("Found {}: {}", href.isRegularFile() ? "file" : "path", Printable.of(href));
         }
         long links = ANCHOR.matcher(listing).results()
                 .filter(anchor -> !PARENT_DIRECTORY.equals(anchor.group(1).trim()))
@@ -224,7 +230,51 @@ public class TextHtmlProcessor implements Processor<CompletableFuture<Summary>> 
                                         .ifPresent(this.getOnExpires());
                             }
                         });
-        return hrefs.stream().filter(this::firstVisit);
+        return new Listing(hrefs, invalid);
+    }
+
+    /**
+     * Reference of the listing entry
+     * @param page listing page
+     * @param matcher matcher of the entry
+     * @return reference of the entry or null if the link is outside of the mirrored folder
+     * @throws RuntimeException if the entry has an invalid link, date or size
+     */
+    private @Nullable HREF parseEntry(@NonNull Page page, @NonNull Matcher matcher) {
+        boolean folder = matcher.group(8) != null;
+        URI uri = page.getUri().resolve(Html.unescape(matcher.group(9)));
+        if (!this.getLinkPolicy().accepts(uri)) {
+            logger.warn("Link is outside of the mirrored folder and is skipped: '{}'", Printable.of(uri));
+            return null;
+        }
+        if (folder && !uri.getRawPath().endsWith("/")) {
+            uri = URI.create(uri + "/");
+        }
+        return HREF.builder()
+                .uri(uri)
+                .bytes(Optional.ofNullable(matcher.group(7))
+                        .filter(Predicate.not(String::isBlank))
+                        .map(Long::parseLong).orElse(null))
+                .dateTime(LocalDateTime.of(
+                        Integer.parseInt(matcher.group(3)),
+                        Integer.parseInt(matcher.group(1)),
+                        Integer.parseInt(matcher.group(2)),
+                        Integer.parseInt(matcher.group(4)) % 12 + ("P".equalsIgnoreCase(matcher.group(6)) ? 12 : 0),
+                        Integer.parseInt(matcher.group(5))))
+                .regularFile(!folder)
+                .build();
+    }
+
+    /**
+     * Resources of a listing to process and the number of its entries that cannot be parsed
+     */
+    @Getter
+    @AllArgsConstructor(access = AccessLevel.PRIVATE)
+    private static final class Listing {
+
+        private final List<HREF> hrefs;
+        private final long invalid;
+
     }
 
     /**

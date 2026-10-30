@@ -143,7 +143,27 @@ class TextHtmlProcessorTest extends AbstractFileSourceTest {
         startUp("files");
         when(this.href.getBytes()).thenReturn(this.bytes + 10);
         var completableFuture = assertDoesNotThrow(() -> this.textHtmlProcessor(this.page).process());
-        assertEquals(Summary.EMPTY, assertDoesNotThrow(completableFuture::join));
+        assertEquals(Summary.FAILED, assertDoesNotThrow(completableFuture::join));
+    }
+
+    @Test
+    void invalidEntryIsIsolatedTest() throws IOException {
+        startUp("invalid-entry");
+        Summary summary = this.textHtmlProcessor(this.page).process().join();
+        assertEquals(List.of(Path.of("/deliver/etsi_ts/129000_129099/129078/17.00.00_60/ts_129078v170000p0.zip")), processedPaths());
+        assertEquals(1L, summary.getDownloaded());
+        assertEquals(1L, summary.getFailed());
+    }
+
+    @Test
+    void failingChildIsIsolatedTest() throws IOException {
+        startUp("files");
+        ProcessorFactory<CompletableFuture<Summary>> failing = page -> page.fileName().endsWith(".pdf")
+                ? () -> { throw new IllegalStateException("broken processor"); }
+                : () -> CompletableFuture.completedFuture(Summary.DOWNLOADED);
+        Summary summary = new TextHtmlProcessor(this.page, failing, LINK_POLICY, DIRECT, this.onExpires).process().join();
+        assertEquals(1L, summary.getDownloaded());
+        assertEquals(1L, summary.getFailed());
     }
 
     @Test

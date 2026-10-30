@@ -88,7 +88,7 @@ class FileSaveProcessorTest extends AbstractFileSourceTest {
         int offset = length() / 3;
         when(this.page.inputStreamFrom(0L)).thenReturn(new FailingInputStream(this.buff, offset));
         when(this.page.inputStreamFrom(offset)).thenReturn(new ByteArrayInputStream(new byte[0]));
-        assertEquals(Summary.EMPTY, process());
+        assertEquals(Summary.FAILED, process());
         assertTrue(Files.notExists(this.target));
         assertArrayEquals(Arrays.copyOf(this.buff, offset), Files.readAllBytes(this.part));
     }
@@ -99,7 +99,7 @@ class FileSaveProcessorTest extends AbstractFileSourceTest {
         Files.createDirectories(this.target.getParent());
         Files.write(this.target, old);
         when(this.page.inputStreamFrom(0L)).thenReturn(new FailingInputStream(this.buff, 0));
-        assertEquals(Summary.EMPTY, process());
+        assertEquals(Summary.FAILED, process());
         assertArrayEquals(old, Files.readAllBytes(this.target));
     }
 
@@ -160,7 +160,7 @@ class FileSaveProcessorTest extends AbstractFileSourceTest {
     @Test
     void remoteLengthMismatchTest() throws IOException {
         doReturn(this.bytes, this.bytes + 1).when(this.page).contentLength();
-        assertEquals(Summary.EMPTY, process());
+        assertEquals(Summary.FAILED, process());
         assertTrue(Files.notExists(this.target));
         assertTrue(Files.notExists(this.part));
     }
@@ -225,7 +225,7 @@ class FileSaveProcessorTest extends AbstractFileSourceTest {
     void directoryIsNotReplacedTest() throws IOException {
         Path file = Files.createDirectories(this.target).resolve("file.txt");
         Files.writeString(file, "keep me");
-        assertEquals(Summary.EMPTY, process());
+        assertEquals(Summary.FAILED, process());
         assertTrue(Files.isDirectory(this.target));
         assertTrue(Files.exists(file));
     }
@@ -233,7 +233,7 @@ class FileSaveProcessorTest extends AbstractFileSourceTest {
     @Test
     void outsideDestinationTest() {
         when(this.href.getUri()).thenReturn(URI.create("http://localhost/../outside.pdf"));
-        assertEquals(Summary.EMPTY, process());
+        assertEquals(Summary.FAILED, process());
         assertTrue(Files.notExists(this.tempDir.resolve("outside.pdf")));
     }
 

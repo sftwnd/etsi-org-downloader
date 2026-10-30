@@ -20,6 +20,9 @@ The options are passed to the JVM, e.g. another site folder and destination:
 | `-Dthreads`| number of processors            | Threads that process listings and files, i.e. simultaneous requests  |
 | `-Dzone`   | `UTC`                           | Time zone of the listing time; www.etsi.org lists it in UTC          |
 
+The run ends with the numbers of downloaded, up to date and failed files and the exit status:
+`0` — no failures, `1` — some resources have failed, `2` — invalid configuration.
+
 ## Remove Docker image
 
 ```console
