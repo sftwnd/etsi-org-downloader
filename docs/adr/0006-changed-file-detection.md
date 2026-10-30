@@ -1,52 +1,53 @@
-# ADR-0006: Решение о перекачке — размер и время листинга, `.part` привязан к версии файла
+# ADR-0006: Download decision — size and listing time, `.part` bound to the file version
 
-- Статус: Принято
-- Дата: 2026-10-30
+- Status: Accepted
+- Date: 2026-10-30
+- Russian version: [ADR-0006](ru/0006-changed-file-detection.md)
 
-## Контекст
+## Context
 
-`FileSaveProcessor` решал, нужна ли загрузка, только по размеру (#10):
+`FileSaveProcessor` decided whether to download a file by its size only (#10):
 
-- обновлённый на сайте файл того же размера оставался старым, но получал новое время — устаревший файл выглядел
-  актуальным;
-- `.part` (ADR-0005) мог остаться от предыдущей версии файла, и докачка склеила бы начало старой версии
-  с концом новой;
-- `If-Range` не отправлялся, `Content-Range` ответа `206` не проверялся;
-- цикл чтения доверял размеру из листинга: при расхождении с фактическим размером запрос уходил за конец файла
-  или терялся последний блок.
+- a file updated on the site with the same size stayed old but got the new time — a stale file looked up to date;
+- a `.part` ([ADR-0005](0005-part-file-download.md)) could remain from a previous version of the file, and a resume
+  would glue the beginning of the old version to the end of the new one;
+- `If-Range` was not sent, `Content-Range` of a `206` response was not checked;
+- the read loop trusted the size from the listing: if it differed from the real size, the request went beyond the end
+  of the file or the last block was lost.
 
-Время листинга www.etsi.org совпадает с `Last-Modified` файла в UTC с точностью до минуты (#23). Файлы, сохранённые
-прежними версиями программы, получили время листинга, прочитанное в системной зоне (например, MSK), и отличаются
-от UTC на целое число часов.
+The listing time of www.etsi.org matches the `Last-Modified` of the file in UTC to the minute (#23). Files saved by
+previous versions of the program got the listing time read in the system zone (e.g. MSK), and they differ from UTC
+by a whole number of hours.
 
-## Решение
+## Decision
 
-- Локальный файл актуален, если его размер равен размеру из листинга, а время — времени листинга.
-- Если время отличается на величину до 26 часов, кратную 15 минутам, это сдвиг часового пояса: время файла
-  выставляется по листингу, файл не скачивается. Любое другое расхождение времени или размера — файл изменён на сайте
-  и скачивается заново.
-- Имя `.part` содержит время листинга: `<имя>.<yyyyMMddHHmm>.part`. Перед загрузкой `.part` других версий того же
-  файла удаляются; докачивается только `.part` текущей версии.
-- Ответ `206` должен содержать `Content-Range`, начинающийся с запрошенного смещения, иначе это `ProtocolException`
-  без повторов. Полная длина из `Content-Range` или `Content-Length` должна совпасть с размером из листинга, иначе
-  `.part` удаляется, а файл получает ошибку до следующего прогона.
-- Чтение ограничено оставшейся длиной файла, поэтому лишние байты ответа не читаются и последний блок всегда записывается.
+- A local file is up to date if its size equals the size from the listing and its time equals the listing time.
+- If the time differs by up to 26 hours in a multiple of 15 minutes, this is a shift of the time zone: the file time
+  is set from the listing and the file is not downloaded. Any other difference of the time or the size means that the
+  file has changed on the site, and it is downloaded again.
+- The name of `.part` contains the listing time: `<name>.<yyyyMMddHHmm>.part`. Before a download the `.part` files of
+  other versions of the same file are removed; only the `.part` of the current version is resumed.
+- A `206` response must contain `Content-Range` that starts at the requested offset, otherwise it is a
+  `ProtocolException` without retries. The total length from `Content-Range` or `Content-Length` must match the size
+  from the listing, otherwise `.part` is removed and the file fails until the next run.
+- Reading is bounded by the remaining length of the file, so extra bytes of the response are not read and the last
+  block is always written.
 
-## Обоснование
+## Rationale
 
-- Время листинга — это `Last-Modified` файла, то есть признак версии, который даёт сам сайт без дополнительных
-  запросов и хранения метаданных.
-- Разница часовых поясов на Земле не превышает 26 часов и кратна 15 минутам. Настоящее изменение файла совпадает с таким
-  сдвигом, только если случилось в пределах суток и ровно на границе четверти часа; иначе это правило избавляет
-  от полной перекачки зеркала после смены зоны (#23).
-- Привязка `.part` к времени листинга вместе с проверкой полной длины в ответе даёт тот же результат, что и `If-Range`,
-  но не требует хранить `ETag`/`Last-Modified` между прогонами: докачивается только часть той версии, которую описывает
-  текущий листинг.
-- Несовпадение длины в ответе и в листинге означает, что листинг и файл описывают разные версии; скачивать в такой
-  ситуации нельзя ни по одной из длин.
+- The listing time is the `Last-Modified` of the file, i.e. a version mark that the site itself provides without
+  additional requests and without storing metadata.
+- The difference between time zones on Earth does not exceed 26 hours and is a multiple of 15 minutes. A real change
+  of a file coincides with such a shift only if it happened within a day and exactly on a quarter of an hour; otherwise
+  this rule saves a full re-download of the mirror after a change of the zone (#23).
+- Binding `.part` to the listing time together with the check of the total length in the response gives the same
+  result as `If-Range`, but does not require storing `ETag`/`Last-Modified` between runs: only a part of the version
+  described by the current listing is resumed.
+- A mismatch of the length in the response and in the listing means that the listing and the file describe different
+  versions; downloading by either length is not possible in this situation.
 
-## Последствия
+## Consequences
 
-- Файл, изменённый на сайте при том же размере, скачивается заново.
-- После смены часового пояса время файлов один раз выставляется заново без перекачки.
-- Файл, который пользователь изменил вручную (и тем самым изменил время), будет скачан заново.
+- A file changed on the site with the same size is downloaded again.
+- After a change of the time zone the time of the files is set again once, without a re-download.
+- A file that the user has changed manually (and thereby changed its time) will be downloaded again.

@@ -1,48 +1,50 @@
-# ADR-0001: Отображение ресурсов сайта в локальные пути через Destination
+# ADR-0001: Map site resources to local paths through Destination
 
-- Статус: Принято
-- Дата: 2026-10-30
+- Status: Accepted
+- Date: 2026-10-30
+- Russian version: [ADR-0001](ru/0001-destination-local-paths.md)
 
-## Контекст
+## Context
 
-Локальный путь ресурса строился как `Path.of(dest, uri.getPath())` в `FileSaveProcessor` и в `Main` при удалении
-устаревших версий. `uri.getPath()` возвращает декодированный, но не нормализованный путь, а `URI.resolve` не нормализует
-абсолютный путь ссылки. Поэтому ссылка из листинга могла указать на любой файл, доступный процессу на запись (#4):
+The local path of a resource was built as `Path.of(dest, uri.getPath())` in `FileSaveProcessor` and in `Main` when
+expired versions were removed. `uri.getPath()` returns the decoded but not normalized path, and `URI.resolve` does not
+normalize the absolute path of a link. A link from a listing could therefore address any file the process may write (#4):
 
 - `/../../tmp/x` → `./../../tmp/x`;
-- `/deliver/%2E%2E/%2E%2E/x` → `./deliver/../../x`: `%2E%2E` превращается в `..` только при декодировании,
-  поэтому ни проверка исходной строки, ни `URI.normalize()` его не видят.
+- `/deliver/%2E%2E/%2E%2E/x` → `./deliver/../../x`: `%2E%2E` turns into `..` only when it is decoded,
+  so neither a check of the raw string nor `URI.normalize()` sees it.
 
-Листинг — недоверенные данные: сайт или CDN могут быть скомпрометированы, `-Duri` может указывать на другой сервер.
+A listing is untrusted data: the site or its CDN may be compromised, `-Duri` may point to another server.
 
-## Решение
+## Decision
 
-Ввести компонент `Destination` — единственное место, где URI ресурса превращается в локальный путь:
+Introduce `Destination`, the only place where a resource URI becomes a local path:
 
-- корень — абсолютный нормализованный путь папки назначения;
-- локальный путь строится по сегментам **декодированного** пути ресурса: `root.resolve(segment)` для каждого сегмента;
-- отклоняются: путь не от корня сайта, закодированный разделитель (`%2F`, `%5C`), пустой сегмент, `.` и `..`, `\`,
-  управляющие и форматирующие символы, а также сегмент, который на данной платформе добавляет к пути не ровно одно имя
-  (например, `C:` в Windows);
-- итоговая защитная проверка — `path.normalize().startsWith(root)`;
-- нарушение — `IllegalArgumentException` с экранированным через `Printable` текстом; ресурс пропускается с ошибкой в логе.
+- the root is the absolute normalized path of the destination folder;
+- the local path is built from the segments of the **decoded** resource path: `root.resolve(segment)` for every segment;
+- rejected are: a path that does not start at the site root, an encoded separator (`%2F`, `%5C`), an empty segment,
+  `.` and `..`, `\`, control and format characters, and a segment that adds anything but exactly one name to the path
+  on the platform (e.g. `C:` on Windows);
+- the final safety check is `path.normalize().startsWith(root)`;
+- a violation is an `IllegalArgumentException` with the text escaped by `Printable`; the resource is skipped with an
+  error in the log.
 
-`FileSaveProcessor` получает путь файла только из `Destination`; `Main` так же отображает устаревшие версии перед
-удалением, поэтому `onExpires` получает URI, а не декодированные пути.
+`FileSaveProcessor` takes the file path only from `Destination`; `Main` maps expired versions the same way before
+removing them, so `onExpires` receives URIs instead of decoded paths.
 
-## Обоснование
+## Rationale
 
-- Проверяется то, что действительно используется для доступа к файловой системе: путь после декодирования и сборки,
-  а не исходная строка ссылки.
-- Посегментная проверка не допускает `..` в пути вообще, а `startsWith` страхует от особенностей платформы —
-  две независимые проверки.
-- Один компонент вместо разбросанных `Path.of(root, path)` (SRP, DRY): правила отображения меняются в одном месте
-  и покрыты одним набором тестов.
-- `toRealPath` не используется: файл ещё может не существовать. Символические ссылки при удалении — отдельная задача (#6).
+- What is checked is what is actually used to access the file system: the path after decoding and resolving,
+  not the raw string of the link.
+- The segment check does not allow `..` in the path at all, and `startsWith` guards against platform specifics —
+  two independent checks.
+- One component instead of scattered `Path.of(root, path)` calls (SRP, DRY): the mapping rules change in one place and
+  are covered by one set of tests.
+- `toRealPath` is not used: the file may not exist yet. Symbolic links on removal are a separate task (#6).
 
-## Последствия
+## Consequences
 
-- Допустимые пути отображаются как раньше: локальная структура повторяет путь на сайте (`<dest>/deliver/...`).
-- Пути в логах — абсолютные.
-- Ресурс с недопустимым путём не скачивается и не удаляется. Ограничение обхода исходным каталогом и хостом — отдельное
-  решение (#5).
+- Valid paths are mapped as before: the local structure repeats the path on the site (`<dest>/deliver/...`).
+- Paths in the log are absolute.
+- A resource with an invalid path is neither downloaded nor removed. Restricting the crawl to the start folder and host
+  is a separate decision (#5).

@@ -1,53 +1,58 @@
-# ADR-0005: Модель загрузки файла — `.part` и атомарная замена
+# ADR-0005: File download model — `.part` and atomic replacement
 
-- Статус: Принято
-- Дата: 2026-10-30
+- Status: Accepted
+- Date: 2026-10-30
+- Russian version: [ADR-0005](ru/0005-part-file-download.md)
 
-## Контекст
+## Context
 
-`FileSaveProcessor` писал файл сразу под окончательным именем и при любой `IOException` удалял его (#9):
+`FileSaveProcessor` wrote a file directly under its final name and deleted it on any `IOException` (#9):
 
-- если не удавалось выставить время уже скачанного файла (чужой файл, ФС без атрибута), удалялся полный файл,
-  и следующий прогон скачивал и удалял его снова;
-- при обрыве сети удалялся недокачанный файл, поэтому докачка из #1 работала только после убийства процесса;
-- недокачанный файл под окончательным именем не отличался от полного ничем, кроме размера, а любой существующий файл
-  меньшего размера считался недокачанным и дописывался — в том числе чужой файл (вместе с #4 и #5 это давало запись
-  в `run.sh`).
+- if the time of an already downloaded file could not be set (a file of another user, a file system without the
+  attribute), the complete file was deleted, and the next run downloaded and deleted it again;
+- when the network broke, the partially downloaded file was deleted, so the resume from #1 worked only after the
+  process was killed;
+- a partial file under the final name differed from a complete one only by its size, and any existing smaller file
+  was treated as partial and appended to — including a foreign file (together with #4 and #5 this allowed writing
+  to `run.sh`).
 
-## Решение
+## Decision
 
-- Файл скачивается в соседний файл `<имя>.part`; окончательное имя появляется только у полного файла — после
-  выставления времени из листинга `.part` переименовывается в него через `Files.move(..., ATOMIC_MOVE)`
-  (без поддержки атомарного переименования — `REPLACE_EXISTING`).
-- Докачка продолжает только `.part`; `.part` длиннее ожидаемого файла удаляется, и загрузка начинается заново.
-- Существующий файл не дописывается никогда: файл ожидаемого размера считается актуальным, файл другого размера
-  скачивается заново в `.part` и заменяется целиком.
-- При ошибке загрузки `.part` сохраняется для докачки, существующий файл не трогается. Ошибка выставления времени —
-  предупреждение, а не удаление.
-- Путь, занятый не обычным файлом (каталог, символическая ссылка), — ошибка, путь не изменяется.
+- A file is downloaded to a sibling file `<name>.part`; the final name appears only for a complete file — after the
+  time from the listing is set, `.part` is renamed to it with `Files.move(..., ATOMIC_MOVE)`
+  (`REPLACE_EXISTING` where an atomic rename is not supported).
+- A resume continues only a `.part`; a `.part` longer than the expected file is removed, and the download starts over.
+- An existing file is never appended to: a file of the expected size is up to date, a file of another size is
+  downloaded again to `.part` and replaced as a whole.
+- On a download error `.part` is kept for a resume, and the existing file is not touched. A failure to set the time
+  is a warning, not a removal.
+- A path occupied by something other than a regular file (a folder, a symbolic link) is an error; the path is not
+  changed.
 
-## Обоснование
+## Rationale
 
-- Полный файл и незавершённая загрузка различаются по имени, а не по косвенным признакам; при сбое на любом шаге под
-  окончательным именем остаётся либо прежний файл, либо новый целиком.
-- Переименование внутри одного каталога атомарно в POSIX-системах, поэтому читатель зеркала никогда не видит
-  наполовину записанный файл, а время файла выставляется до появления окончательного имени.
-- Программа удаляет и перезаписывает только то, что создала сама: `.part` и файл, который она заменяет целиком.
-- Докачка после сетевой ошибки и после убийства процесса работает одинаково — через `.part`.
+- A complete file and an unfinished download differ by name, not by indirect signs; after a failure at any step the
+  final name holds either the previous file or the new one as a whole.
+- A rename within one folder is atomic on POSIX systems, so a reader of the mirror never sees a half-written file,
+  and the file time is set before the final name appears.
+- The program removes and overwrites only what it has created itself: `.part` and the file it replaces as a whole.
+- A resume after a network error and after a killed process works the same way — through `.part`.
 
-## Последствия
+## Consequences
 
-- В каталоге зеркала временно появляются файлы `*.part`; после успешной загрузки их нет.
-- Повторная загрузка файла другого размера скачивает его целиком, а не дописывает.
-- Привязка `.part` к версии файла на сайте и решение о перекачке по времени листинга — ADR-0006.
+- `*.part` files appear in the mirror folders for a while; after a successful download they are gone.
+- A repeated download of a file of another size downloads it as a whole instead of appending.
+- Binding `.part` to the version of the file on the site and the decision to download again by the listing time are
+  [ADR-0006](0006-changed-file-detection.md).
 
-## Дополнение: блокировка `.part` (#15)
+## Addendum: locking `.part` (#15)
 
-`synchronized` на экземпляре `FileSaveProcessor` ничего не исключал: на каждый файл создаётся свой экземпляр.
-Загрузка выполняется под блокировкой самого файла `.part` (`FileChannel.tryLock()`, без ожидания):
+`synchronized` on a `FileSaveProcessor` instance excluded nothing: every file gets its own instance.
+The download runs under a lock of the `.part` file itself (`FileChannel.tryLock()`, without waiting):
 
-- внутри JVM блокировки учитываются по идентичности файла (устройство и inode), поэтому исключаются и задачи, которые
-  пишут один файл под разными именами (имена, различающиеся регистром, на регистронезависимой ФС);
-- блокировка видна другим процессам, поэтому два одновременных запуска с одной папкой назначения не пишут один файл;
-- задача, не получившая блокировку, пропускает файл с предупреждением; получившая — повторно проверяет актуальность
-  файла, чтобы не скачивать заново файл, который другая задача только что заменила.
+- inside the JVM the locks are tracked by the identity of the file (device and inode), so tasks writing one file
+  under different names (names that differ in case on a case-insensitive file system) are excluded as well;
+- the lock is visible to other processes, so two simultaneous runs with one destination folder do not write the same
+  file;
+- a task that did not get the lock skips the file with a warning; a task that got it checks the file again, so as not
+  to download a file that another task has just replaced.

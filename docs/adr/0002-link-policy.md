@@ -1,50 +1,54 @@
-# ADR-0002: Политика ссылок обхода — LinkPolicy
+# ADR-0002: Crawl link policy — LinkPolicy
 
-- Статус: Принято
-- Дата: 2026-10-30
+- Status: Accepted
+- Date: 2026-10-30
+- Russian version: [ADR-0002](ru/0002-link-policy.md)
 
-## Контекст
+## Context
 
-`TextHtmlProcessor` переходил по любой ссылке из листинга (#5):
+`TextHtmlProcessor` followed any link from a listing (#5):
 
-- `//evil.example/deliver/...` — запрос уходил на чужой хост, а ответ сохранялся под путями ETSI;
-- `http://...` — скачивание без TLS;
-- `/run.sh` — путь вне `/deliver/`; при `-Ddest=.` он совпадает с файлом проекта, и `Destination` (ADR-0001) такой путь
-  пропускает: он внутри папки назначения;
-- `ftp:`, `file:`, `jar:`, `mailto:` — `ClassCastException` или NPE роняли весь прогон;
-- не было множества посещённых ссылок и ограничения глубины: ссылка на предка или циклический каталог на сервере
-  приводили к бесконечному обходу.
+- `//evil.example/deliver/...` — the request went to a foreign host, while the response was stored under ETSI paths;
+- `http://...` — a download without TLS;
+- `/run.sh` — a path outside `/deliver/`; with `-Ddest=.` it is a file of the project, and `Destination`
+  ([ADR-0001](0001-destination-local-paths.md)) lets such a path through: it is inside the destination folder;
+- `ftp:`, `file:`, `jar:`, `mailto:` — `ClassCastException` or NPE aborted the whole run;
+- there was no set of visited links and no depth limit: a link to an ancestor or a cyclic folder on the server led
+  to an endless crawl.
 
-Стартовый URI из `-Duri` тоже не проверялся.
+The start URI from `-Duri` was not validated either.
 
-## Решение
+## Decision
 
-Ввести компонент `LinkPolicy`, который создаётся из стартового URI и решает, по каким ссылкам идти:
+Introduce `LinkPolicy`, which is created from the start URI and decides which links to follow:
 
-- стартовый URI — только `http`/`https` с хостом, без user info, query и fragment, с безопасным путём;
-  он нормализуется: схема и хост в нижнем регистре, путь заканчивается на `/`;
-- ссылка принимается, если у неё та же схема, хост и порт (с учётом порта по умолчанию), нет user info, query и fragment,
-  путь безопасен (те же правила сегментов, что и в `Destination`: общий `ResourcePath`) и лежит внутри стартовой папки
-  не глубже `MAX_DEPTH = 32` сегментов;
-- `visit(uri)` регистрирует ресурс в потокобезопасном множестве посещённых и возвращает `false` для повторного визита;
-  ключ — сегменты декодированного пути, поэтому `/a/b` и `/a/b/` — один ресурс.
+- the start URI is `http`/`https` only, with a host, without user info, query and fragment, with a safe path;
+  it is normalized: the scheme and the host in lower case, the path ends with `/`;
+- a link is accepted if it has the same scheme, host and port (the default port included), no user info, query and
+  fragment, and a safe path (the same segment rules as in `Destination`: the shared `ResourcePath`) inside the start
+  folder, no deeper than `MAX_DEPTH = 32` segments;
+- `visit(uri)` registers the resource in a thread-safe set of visited resources and returns `false` on a repeated
+  visit; the key is the segments of the decoded path, so `/a/b` and `/a/b/` are one resource.
 
-`TextHtmlProcessor` отбрасывает непринятые ссылки (WARN с экранированным URI) **до** выбора актуальной версии,
-а повторно встреченные ресурсы — перед обработкой. `Main` строит политику из `-Duri`; некорректный URI — ошибка
-и завершение без обхода. `Page` дополнительно отказывается работать с не-HTTP соединением.
+`TextHtmlProcessor` drops rejected links (a WARN with the escaped URI) **before** the actual version is chosen, and
+drops resources met again before they are processed. `Main` builds the policy from `-Duri`; an invalid URI is an error
+that ends the run without crawling. `Page` additionally refuses a non-HTTP connection.
 
-## Обоснование
+## Rationale
 
-- Ссылки фильтруются до выбора версий: иначе чужая папка `99.00.00_60` стала бы «актуальной», а все настоящие версии
-  ушли бы на удаление.
-- Правила сегментов общие с `Destination` (DRY): путь, принятый политикой, гарантированно отображается в папку назначения.
-- `MAX_DEPTH` с запасом покрывает структуру ETSI (`deliver/etsi_ts/<диапазон>/<документ>/<версия>/<файл>`) и ограничивает
-  рост пути при циклических каталогах на сервере; повторы внутри глубины отсекает множество посещённых.
-- Сравнение схемы и порта запрещает переход с HTTPS на HTTP. Редиректы обрабатывает `HttpURLConnection`: он не переходит
-  между протоколами, а ответ сохраняется под запрошенным путём, уже проверенным политикой.
+- Links are filtered before the versions are chosen: otherwise a foreign folder `99.00.00_60` would become "actual",
+  and all the real versions would be removed.
+- The segment rules are shared with `Destination` (DRY): a path accepted by the policy is guaranteed to map into the
+  destination folder.
+- `MAX_DEPTH` covers the ETSI structure (`deliver/etsi_ts/<range>/<document>/<version>/<file>`) with a margin and
+  limits the growth of the path with cyclic folders on the server; repetitions within the depth are cut off by the set
+  of visited resources.
+- Comparing the scheme and the port forbids switching from HTTPS to HTTP. Redirects are handled by
+  `HttpURLConnection`: it does not follow them across protocols, and the response is stored under the requested path,
+  which has already been checked by the policy.
 
-## Последствия
+## Consequences
 
-- Зеркалируется только стартовая папка; ссылки за её пределы пропускаются с WARN.
-- Множество посещённых растёт с числом ресурсов дерева — по списку сегментов на ресурс.
-- Запуск с `-Duri` не на `http`/`https` или с query завершается ошибкой конфигурации.
+- Only the start folder is mirrored; links outside it are skipped with a WARN.
+- The set of visited resources grows with the number of resources of the tree — a list of segments per resource.
+- A start with `-Duri` that is not `http`/`https` or has a query ends with a configuration error.

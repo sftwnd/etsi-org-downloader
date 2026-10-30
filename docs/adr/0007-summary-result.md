@@ -1,35 +1,37 @@
-# ADR-0007: Результат обработки — значение Summary вместо потока путей
+# ADR-0007: Processing result — a Summary value instead of a stream of paths
 
-- Статус: Принято
-- Дата: 2026-10-30
+- Status: Accepted
+- Date: 2026-10-30
+- Russian version: [ADR-0007](ru/0007-summary-result.md)
 
-## Контекст
+## Context
 
-Обработчики возвращали `CompletableFuture<Stream<Path>>` — поток путей всех файлов поддерева (#22):
+The processors returned `CompletableFuture<Stream<Path>>` — a stream of the paths of all the files of the subtree (#22):
 
-- `FileSaveProcessor` возвращал путь и для пропущенного, уже актуального файла, поэтому итог «There are N files has been
-  loaded» считал все файлы зеркала, а не скачанные;
-- `Main` собирал и сортировал пути всего дерева только для того, чтобы вывести их количество: память росла с числом
-  файлов зеркала, а это сотни тысяч путей.
+- `FileSaveProcessor` returned the path of a skipped, already up to date file as well, so the summary "There are
+  N files has been loaded" counted all the files of the mirror, not the downloaded ones;
+- `Main` collected and sorted the paths of the whole tree only to print their number: memory grew with the number of
+  files of the mirror, and these are hundreds of thousands of paths.
 
-## Решение
+## Decision
 
-- Результат обработки — неизменяемое значение `Summary` с числом скачанных и актуальных файлов;
-  `Processor<CompletableFuture<Summary>>` для всех обработчиков.
-- `FileSaveProcessor` возвращает `Summary.DOWNLOADED`, `Summary.UP_TO_DATE` или `Summary.EMPTY`
-  (файл не сохранён: ошибка или файл занят другой задачей); `EmptyProcessor` — `Summary.EMPTY`.
-- `TextHtmlProcessor` складывает результаты детей (`Summary::plus`), когда все они завершены.
-- `Main` выводит число скачанных и актуальных файлов.
+- The result of processing is an immutable `Summary` value with the numbers of downloaded and up to date files;
+  `Processor<CompletableFuture<Summary>>` for all the processors.
+- `FileSaveProcessor` returns `Summary.DOWNLOADED`, `Summary.UP_TO_DATE` or `Summary.EMPTY`
+  (the file is not saved: an error, or the file is held by another task); `EmptyProcessor` returns `Summary.EMPTY`.
+- `TextHtmlProcessor` adds up the results of its children (`Summary::plus`) when all of them are completed.
+- `Main` prints the numbers of downloaded and up to date files.
 
-## Обоснование
+## Rationale
 
-- Значение фиксированного размера вместо списка путей: память не зависит от размера дерева, а сложение ассоциативно
-  и не требует синхронизации — результаты собираются композицией future без общего изменяемого состояния.
-- Итог различает скачанные и уже актуальные файлы и отвечает на вопрос, что сделал прогон.
-- `Summary` — естественное место для учёта ошибок и кода завершения (#13) и для решения об удалении устаревших
-  версий по результату поддерева актуальной версии (#8).
+- A value of a fixed size instead of a list of paths: memory does not depend on the size of the tree, and the addition
+  is associative and needs no synchronization — the results are collected by composing futures without shared mutable
+  state.
+- The summary distinguishes downloaded and already up to date files and answers the question of what the run has done.
+- `Summary` is the natural place to account for failures and the exit status (#13) and to decide on the removal of
+  expired versions by the result of the subtree of the actual version (#8).
 
-## Последствия
+## Consequences
 
-- Пути скачанных файлов больше не возвращаются наружу: они видны в журнале (`File ... has been saved`).
-- Тесты проверяют результат как значение, а обработанные ресурсы — через тестовую фабрику.
+- The paths of downloaded files are no longer returned: they are visible in the log (`File ... has been saved`).
+- The tests check the result as a value, and the processed resources through a test factory.

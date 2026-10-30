@@ -1,78 +1,80 @@
-# ADR-0004: Модель конкурентности — вся обработка ресурсов в одном ограниченном пуле
+# ADR-0004: Concurrency model — all resource processing in one bounded pool
 
-- Статус: Принято
-- Дата: 2026-10-30
+- Status: Accepted
+- Date: 2026-10-30
+- Russian version: [ADR-0004](ru/0004-bounded-executor.md)
 
-## Контекст
+## Context
 
-`TextHtmlProcessor` запускал обработку дочерних ресурсов через `CompletableFuture.supplyAsync` без executor (#12),
-а пул из `Main` только склеивал результаты:
+`TextHtmlProcessor` started processing child resources with `CompletableFuture.supplyAsync` without an executor (#12),
+and the pool from `Main` only merged the results:
 
-- при 2 и менее доступных CPU (обычный лимит контейнера) `CompletableFuture` создаёт новый поток на каждую задачу
-  (`ThreadPerTaskExecutor`) — поток и соединение на каждую строку листинга, тысячи потоков, риск
-  `OutOfMemoryError: unable to create native thread` и блокировки IP со стороны сайта;
-- при большем числе CPU блокирующий ввод-вывод шёл в `ForkJoinPool.commonPool()` с параллелизмом CPU−1 без настройки;
-- если асинхронный этап уже завершился к моменту подписки `thenApply`, дочерний ресурс, включая скачивание,
-  обрабатывался синхронно в потоке родителя, в том числе в `main`;
-- запросы представлялись браузером: `User-Agent: Mozilla/5.0`.
+- with 2 or fewer available CPUs (a usual container limit) `CompletableFuture` creates a new thread for every task
+  (`ThreadPerTaskExecutor`) — a thread and a connection per listing line, thousands of threads, a risk of
+  `OutOfMemoryError: unable to create native thread` and of an IP ban by the site;
+- with more CPUs blocking I/O ran in `ForkJoinPool.commonPool()` with parallelism CPU−1 that cannot be configured;
+- if the asynchronous stage had already completed when `thenApply` was attached, the child resource, a download
+  included, was processed synchronously in the parent's thread, `main` included;
+- the requests presented themselves as a browser: `User-Agent: Mozilla/5.0`.
 
-## Решение
+## Decision
 
-- Обработка ресурса целиком — создание `Page`, выбор обработчика, разбор листинга или скачивание — выполняется задачей
-  `supplyAsync(..., executor)` в пуле из `Main`; результат разворачивается через `thenCompose(identity())`,
-  а слияние результатов детей (`allOf`) не создаёт отдельных задач.
-- Размер пула задаётся свойством `-Dthreads` (по умолчанию — число доступных процессоров); executor обязателен
-  для `ComplexProcessorFactory` и `TextHtmlProcessor`.
-- Задачи не ждут друг друга блокирующими вызовами: родитель возвращает future и не держит поток, пока обрабатываются дети.
+- The whole processing of a resource — creating the `Page`, choosing the processor, parsing a listing or
+  downloading — runs as a task `supplyAsync(..., executor)` of the pool from `Main`; the result is unwrapped with
+  `thenCompose(identity())`, and merging the results of the children (`allOf`) creates no separate tasks.
+- The pool size is set with the `-Dthreads` property (the number of available processors by default); the executor
+  is mandatory for `ComplexProcessorFactory` and `TextHtmlProcessor`.
+- Tasks do not wait for each other with blocking calls: a parent returns a future and does not hold a thread while
+  its children are processed.
 - `User-Agent: etsiorg-downloader (+https://github.com/sftwnd/etsi-org-downloader)`.
 
-## Обоснование
+## Rationale
 
-- Число потоков и одновременных соединений ограничено и предсказуемо на любой машине и в контейнере и не зависит
-  от неявных правил выбора пула в `CompletableFuture`.
-- Отдельный семафор на число запросов не нужен (KISS): каждый HTTP-запрос выполняется задачей пула, поэтому пул
-  из N потоков даёт не больше N одновременных запросов.
-- Без блокирующих ожиданий внутри пула фиксированного размера невозможна взаимная блокировка, когда все потоки ждут
-  задачи, которым не хватает потоков; композиция через `thenCompose` сохраняет это свойство.
-- Честный User-Agent позволяет администраторам сайта понять, кто обращается, и связаться; проверено,
-  что www.etsi.org отвечает на такой запрос `200`.
+- The number of threads and simultaneous connections is limited and predictable on any machine and in a container,
+  and it does not depend on the implicit rules `CompletableFuture` uses to choose a pool.
+- A separate semaphore for the number of requests is not needed (KISS): every HTTP request runs as a task of the pool,
+  so a pool of N threads gives at most N simultaneous requests.
+- Without blocking waits inside a fixed-size pool, a deadlock where all the threads wait for tasks that have no thread
+  to run in is impossible; composition with `thenCompose` keeps this property.
+- An honest User-Agent lets the site administrators see who is accessing the site and get in touch; it has been
+  checked that www.etsi.org answers such a request with `200`.
 
-## Последствия
+## Consequences
 
-- Очередь пула не ограничена: в ней лежат задачи для найденных, но ещё не обработанных ресурсов, поэтому память
-  растёт с «фронтом» обхода, а не с числом потоков.
-- По умолчанию параллелизм равен числу CPU; для медленного канала или бережного режима — `-Dthreads=2`.
+- The pool queue is not bounded: it holds the tasks for the resources found but not processed yet, so memory grows
+  with the "front" of the crawl, not with the number of threads.
+- By default the parallelism equals the number of CPUs; for a slow link or a gentle mode — `-Dthreads=2`.
 
-## Диаграмма компонентов (C4, уровень 3)
+## Component diagram (C4, level 3)
 
 ```mermaid
 C4Component
-    title Компоненты etsi-org-downloader
-    Person(user, "Пользователь", "run.sh или docker compose")
-    System_Ext(etsi, "www.etsi.org", "Листинги и документы /deliver/")
+    title Components of etsiorg-downloader
+    Person(user, "User", "run.sh or docker compose")
+    System_Ext(etsi, "www.etsi.org", "Listings and documents of /deliver/")
     Container_Boundary(app, "etsiorg-downloader, JVM") {
-        Component(main, "Main", "Java", "Настройки -Duri, -Ddest, -Dthreads; пул потоков; итог")
-        Component(policy, "LinkPolicy", "Java", "Допустимые ссылки, посещённые ресурсы")
-        Component(factory, "ComplexProcessorFactory", "Java", "Выбор обработчика ресурса")
-        Component(html, "TextHtmlProcessor", "Java", "Разбор листинга, выбор версии, обход детей в пуле")
-        Component(file, "FileSaveProcessor", "Java", "Скачивание файла с докачкой")
-        Component(page, "Page", "Java", "HTTP: таймауты, повторы, Range")
-        Component(dest, "Destination", "Java", "URI в путь внутри папки назначения")
-        Component(remover, "ExpiredRemover", "Java", "Удаление устаревших версий")
+        Component(main, "Main", "Java", "Settings -Duri, -Ddest, -Dthreads; thread pool; summary")
+        Component(policy, "LinkPolicy", "Java", "Accepted links, visited resources")
+        Component(factory, "ComplexProcessorFactory", "Java", "Choice of the resource processor")
+        Component(html, "TextHtmlProcessor", "Java", "Listing parsing, version choice, children in the pool")
+        Component(file, "FileSaveProcessor", "Java", "File download with resume")
+        Component(page, "Page", "Java", "HTTP: timeouts, retries, Range")
+        Component(dest, "Destination", "Java", "URI to a path inside the destination folder")
+        Component(remover, "ExpiredRemover", "Java", "Removal of expired versions")
     }
-    ContainerDb(fs, "Папка назначения", "Файловая система", "Зеркало deliver/...")
-    Rel(user, main, "Запускает")
-    Rel(main, factory, "Корень обхода")
-    Rel(factory, html, "Папка")
-    Rel(factory, file, "Файл")
-    Rel(html, policy, "Проверяет ссылки")
-    Rel(html, factory, "Дети, задачами пула")
-    Rel(html, remover, "Устаревшие версии")
-    Rel(html, page, "Листинг")
-    Rel(file, page, "Содержимое")
+    ContainerDb(fs, "Destination folder", "File system", "Mirror deliver/...")
+    Rel(user, main, "Starts")
+    Rel(main, factory, "Root of the crawl")
+    Rel(factory, html, "Folder")
+    Rel(factory, file, "File")
+    Rel(html, policy, "Checks links")
+    Rel(html, factory, "Children, as pool tasks")
+    Rel(html, remover, "Expired versions")
+    Rel(html, page, "Listing")
+    Rel(file, page, "Content")
     Rel(page, etsi, "HTTPS GET")
-    Rel(file, dest, "Путь файла")
-    Rel(remover, dest, "Путь версии")
-    Rel(file, fs, "Пишет")
-    Rel(remover, fs, "Удаляет")
+    Rel(file, dest, "File path")
+    Rel(remover, dest, "Version path")
+    Rel(file, fs, "Writes")
+    Rel(remover, fs, "Removes")
 ```

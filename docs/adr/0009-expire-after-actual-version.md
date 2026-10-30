@@ -1,33 +1,36 @@
-# ADR-0009: Удаление устаревших версий после успешной обработки актуальной
+# ADR-0009: Remove expired versions after the actual version has been processed successfully
 
-- Статус: Принято
-- Дата: 2026-10-30
+- Status: Accepted
+- Date: 2026-10-30
+- Russian version: [ADR-0009](ru/0009-expire-after-actual-version.md)
 
-## Контекст
+## Context
 
-Из версионных папок `NN.NN.NN_NN` скачивается только актуальная версия, локальные копии остальных удаляются.
-`TextHtmlProcessor` передавал устаревшие версии в `onExpires` прямо при разборе листинга, а актуальная версия
-обрабатывалась позже и асинхронно (#8). Если её загрузка не удавалась (сеть, 5xx, таймаут), локально не оставалось
-ни старой версии, ни новой.
+Of the version folders `NN.NN.NN_NN` only the actual version is downloaded; the local copies of the others are removed.
+`TextHtmlProcessor` passed the expired versions to `onExpires` right while parsing the listing, while the actual
+version was processed later and asynchronously (#8). If its download failed (network, 5xx, timeout), neither the old
+nor the new version remained locally.
 
-## Решение
+## Decision
 
-- Разбор листинга только определяет актуальную версию и список устаревших (строго более старых по номеру версии, #14).
-- Устаревшие версии передаются в `onExpires` в продолжении future актуальной версии и только если в её поддереве
-  нет неудач (`Summary.getFailed() == 0`, ADR-0008).
-- Если актуальная версия завершилась с неудачами или не обрабатывалась в этом листинге (уже посещена),
-  устаревшие версии остаются, а в журнал пишется предупреждение.
-- Исключение при удалении — ошибка в журнале и одна неудача в итоге.
+- Parsing a listing only determines the actual version and the list of expired ones (strictly older by version
+  number, #14).
+- The expired versions are passed to `onExpires` in the continuation of the future of the actual version and only if
+  its subtree has no failures (`Summary.getFailed() == 0`, [ADR-0008](0008-error-isolation-exit-code.md)).
+- If the actual version has completed with failures or has not been processed in this listing (already visited),
+  the expired versions stay, and a warning is written to the log.
+- An exception during the removal is an error in the log and one failure in the summary.
 
-## Обоснование
+## Rationale
 
-- Пользователь зеркала всегда имеет хотя бы одну полную версию документа: старая удаляется только после того,
-  как новая скачана целиком или уже была актуальной.
-- Решение принимается по итогу поддерева (ADR-0007, ADR-0008) без общего изменяемого состояния и без ожидания
-  в потоках пула: удаление — продолжение future актуальной версии.
+- The user of the mirror always has at least one complete version of a document: the old one is removed only after
+  the new one has been downloaded completely or was already up to date.
+- The decision is made by the summary of the subtree ([ADR-0007](0007-summary-result.md),
+  [ADR-0008](0008-error-isolation-exit-code.md)) without shared mutable state and without waiting in the pool threads:
+  the removal is a continuation of the future of the actual version.
 
-## Последствия
+## Consequences
 
-- После неудачного прогона на диске могут временно лежать и старая, и новая (частичная) версии; следующий успешный
-  прогон удалит старую.
-- Устаревшие версии удаляются в потоке пула, завершившем актуальную версию, позже, чем раньше.
+- After a failed run both the old and the new (partial) version may stay on disk for a while; the next successful run
+  removes the old one.
+- Expired versions are removed in the pool thread that has completed the actual version, later than before.
