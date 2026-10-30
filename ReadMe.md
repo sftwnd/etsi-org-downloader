@@ -23,14 +23,24 @@ The options are passed to the JVM, e.g. another site folder and destination:
 The run ends with the numbers of downloaded, up to date and failed files and the exit status:
 `0` — no failures, `1` — some resources have failed, `2` — invalid configuration.
 
+## Start Download in Docker compose
+
+```console
+docker compose up --build
+```
+
+The image is built from the sources and runs the downloader as a non-root user (UID 10001) with a read-only file system;
+only `./deliver` is mounted, the mirror is stored there. On Linux create the folder and make it writable for the user
+before the first start, e.g. `mkdir -p deliver && sudo chown 10001 deliver`.
+
+Properties are passed with `JDK_JAVA_OPTIONS`:
+
+```console
+docker compose run --rm -e JDK_JAVA_OPTIONS="-Duri=https://www.etsi.org/deliver/etsi_ts/ -Dthreads=4" etsiorg
+```
+
 ## Remove Docker image
 
 ```console
 docker rmi sftwnd/etsi-org:1.0
-```
-
-## Start Download in Docker compose
-
-```console
-docker compose up
 ```

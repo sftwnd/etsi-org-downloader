@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
 
   etsiorg:
@@ -8,9 +6,10 @@ services:
       context: ./
     image: sftwnd/etsi-org:1.0
     hostname: etsiorg-downloader
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
     volumes:
-      - ${HOME}/.m2:/root/.m2
-      - ./.settings.xml:/root/.m2/settings.xml
-      - ./:/opt/share/etsiorg
-    command:
-      - "/opt/share/etsiorg/run.sh"
+      - ./deliver:/data/deliver

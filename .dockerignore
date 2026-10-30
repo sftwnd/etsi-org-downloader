@@ -1,0 +1,6 @@
+# Only the build sources go to the build context: not the mirror, the build output or the repository
+*
+!.settings.xml
+!pom.xml
+!lombok.config
+!src/
