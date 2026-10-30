@@ -5,12 +5,16 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.ServerSocket;
+import java.net.Socket;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
@@ -88,6 +92,29 @@ class PageTest {
     @Test
     void inputStreamOffsetRangeIgnoredTest() throws IOException, URISyntaxException {
         assertInputStreamFromOffset(false);
+    }
+
+    @Test
+    void errorStatusLineIsEscapedTest() throws Exception {
+        try (ServerSocket serverSocket = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
+            Thread server = new Thread(() -> {
+                try (Socket socket = serverSocket.accept()) {
+                    BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.ISO_8859_1));
+                    for (String line = reader.readLine(); line != null && !line.isEmpty(); line = reader.readLine()) {
+                        // skip the request headers
+                    }
+                    socket.getOutputStream().write(
+                            "HTTP/1.1 403 Forbidden\u001B[2J\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".getBytes(StandardCharsets.ISO_8859_1));
+                } catch (IOException ignore) {
+                }
+            });
+            server.start();
+            URI uri = new URI("http", null, serverSocket.getInetAddress().getHostAddress(), serverSocket.getLocalPort(), "/file.pdf", null, null);
+            Page page = Page.of(HREF.builder().uri(uri).bytes(1L).dateTime(LocalDateTime.now()).build());
+            IOException exception = assertThrows(IOException.class, page::inputStream);
+            assertEquals("Unable to open HTTP connection: HTTP/1.1 403 Forbidden\\u001B[2J", exception.getMessage());
+            server.join(5_000L);
+        }
     }
 
     @Test

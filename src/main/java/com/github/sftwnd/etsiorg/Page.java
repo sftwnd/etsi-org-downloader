@@ -153,7 +153,7 @@ public class Page {
             connection.setRequestProperty("User-Agent", USER_AGENT);
             if (offset > 0L) {
                 if(! this.acceptRange) {
-                    logger.warn("Accept-Ranges was not defined for connection with offset request for: '{}'", href.path());
+                    logger.warn("Accept-Ranges was not defined for connection with offset request for: '{}'", Printable.of(href.path()));
                 }
                 connection.setRequestProperty("Range", "bytes=" + offset + "-");
             }
@@ -163,17 +163,17 @@ public class Page {
                 this.contentLength = connection.getContentLengthLong();
                 Optional.ofNullable(href.getBytes())
                         .filter(Predicate.not(this.contentLength::equals))
-                        .ifPresent(bytes -> logger.warn("The length of the file: {} is different from the declared size {} of: '{}'", this.contentLength, bytes, href.path()));
+                        .ifPresent(bytes -> logger.warn("The length of the file: {} is different from the declared size {} of: '{}'", this.contentLength, bytes, Printable.of(href.path())));
                 this.acceptRange = Optional.ofNullable(connection.getHeaderField("Accept-Ranges")).map("bytes"::equals).orElse(false);
                 this.inputStream = connection.getInputStream();
                 if (offset > 0L) {
-                    logger.warn("Range request was ignored, {} bytes will be skipped for: '{}'", offset, href.path());
+                    logger.warn("Range request was ignored, {} bytes will be skipped for: '{}'", offset, Printable.of(href.path()));
                     skipFully(this.inputStream, offset);
                 }
             } else if (responseCode == HttpURLConnection.HTTP_PARTIAL) {
                 this.inputStream = connection.getInputStream();
             } else {
-                throw new IOException("Unable to open HTTP connection: " + connection.getHeaderField(0));
+                throw new IOException("Unable to open HTTP connection: " + Printable.of(connection.getHeaderField(0)));
             }
         }
     }

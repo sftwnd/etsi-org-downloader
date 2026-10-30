@@ -62,7 +62,7 @@ public class TextHtmlProcessor implements Processor<CompletableFuture<Stream<Pat
     @Override
     public @NonNull CompletableFuture<Stream<Path>> process() {
         final Page page = this.getPage();
-        logger.debug("Start text/html process: '{}'", page.path());
+        logger.debug("Start text/html process: '{}'", Printable.of(page.path()));
         try {
             var result = swap(
                     parseFile(page)
@@ -70,10 +70,10 @@ public class TextHtmlProcessor implements Processor<CompletableFuture<Stream<Pat
                                     .supplyAsync(() -> Page.of(href))
                                     .thenApply(this.getProcessorFactory()::processor)
                                     .thenCompose(Processor::process)));
-            logger.trace("Text/html page has been processed: '{}'", page.path());
+            logger.trace("Text/html page has been processed: '{}'", Printable.of(page.path()));
             return result;
         } catch (IOException ioex) {
-            logger.error("Unable to process text/html page: '{}'. Cause[{}]: {}", page.path(), ioex.getClass().getSimpleName(), ioex.getMessage());
+            logger.error("Unable to process text/html page: '{}'. Cause[{}]: {}", Printable.of(page.path()), ioex.getClass().getSimpleName(), Printable.of(ioex.getMessage()));
             return CompletableFuture.completedFuture(Stream.empty());
         }
     }
@@ -169,7 +169,7 @@ public class TextHtmlProcessor implements Processor<CompletableFuture<Stream<Pat
                             .orElse(false))
                     .build();
             (href.isVersioned() ? versionedHrefs : hrefs).add(href);
-            logger.trace("Found {}: {}", href.isRegularFile() ? "file" : "path", href);
+            logger.trace("Found {}: {}", href.isRegularFile() ? "file" : "path", Printable.of(href));
         }
         versionedHrefs
                 .stream()
@@ -177,7 +177,7 @@ public class TextHtmlProcessor implements Processor<CompletableFuture<Stream<Pat
                 .ifPresent(
                         actualRef -> {
                             hrefs.add(actualRef);
-                            logger.info("Found actual version: '{}'", actualRef.path());
+                            logger.info("Found actual version: '{}'", Printable.of(actualRef.path()));
                             if (this.getOnExpires() != null) {
                                 Optional.of(versionedHrefs
                                                 .stream()
