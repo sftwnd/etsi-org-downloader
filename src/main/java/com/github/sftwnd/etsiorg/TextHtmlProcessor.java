@@ -144,9 +144,19 @@ public class TextHtmlProcessor implements Processor<CompletableFuture<Stream<Pat
                 <br></pre><hr></body></html>
 
      */
+    /**
+     * Listing entry: date, time, size or {@code <dir>}, link and its text. Every quantifier is either bounded or stops at
+     * a delimiter it cannot cross, so the matching time is linear in the listing length
+     */
     private static final Pattern REF_PATTERN = Pattern.compile(
-            "<br>\\s*(\\d+)/(\\d+)/(\\d+)\\s+(\\d+):(\\d+)\\s+(.)M\\s+(?:(\\d+)|\\S+(dir)\\S+)\\s+<a\\s+.*?href\\s*=\\s*\"(.*?)\".*?>(.*?)</a>",
+            "<br>\\s*(\\d{1,2})/(\\d{1,2})/(\\d{4})\\s+(\\d{1,2}):(\\d{2})\\s+([AP])M\\s+(?:(\\d{1,18})|\\S{0,16}(dir)\\S{0,16})"
+                    + "\\s+<a\\s+[^>]*?href\\s*=\\s*\"([^\"]*)\"[^>]*>([^<]*)</a>",
             CASE_INSENSITIVE);
+
+    /**
+     * Maximal size of a listing: the largest ETSI listings are tens of kilobytes
+     */
+    static final int MAX_LISTING_SIZE = 4 << 20;
 
     /**
      * Parse loader with references to the stream of URI
@@ -172,7 +182,7 @@ public class TextHtmlProcessor implements Processor<CompletableFuture<Stream<Pat
                             Integer.parseInt(matcher.group(3)),
                             Integer.parseInt(matcher.group(1)),
                             Integer.parseInt(matcher.group(2)),
-                            Integer.parseInt(matcher.group(4)) % 12 + (matcher.group(6).charAt(0) == 'P' ? 12 : 0),
+                            Integer.parseInt(matcher.group(4)) % 12 + ("P".equalsIgnoreCase(matcher.group(6)) ? 12 : 0),
                             Integer.parseInt(matcher.group(5))))
                     .regularFile(! Optional.ofNullable(matcher.group(8))
                             .map(String::toLowerCase).map(String::trim)
@@ -223,14 +233,21 @@ public class TextHtmlProcessor implements Processor<CompletableFuture<Stream<Pat
      * @throws IOException in the case of error
      */
     private @NonNull String loadFile(@NonNull Page page) throws IOException {
-        byte[] buff = new byte[Long.valueOf(page.contentLength()).intValue()];
-        try (InputStream inputStream = page.inputStream()) {
-            int readed = inputStream.readNBytes(buff, 0, buff.length);
-            if (readed < buff.length) {
-                throw new EOFException("Listing has ended after " + readed + " of " + buff.length + " bytes");
-            }
+        long contentLength = page.contentLength();
+        if (contentLength > MAX_LISTING_SIZE) {
+            throw new IOException("Listing is too large: " + contentLength + " bytes, the limit is " + MAX_LISTING_SIZE);
         }
-        return new String(buff, page.charset());
+        byte[] content;
+        try (InputStream inputStream = page.inputStream()) {
+            content = inputStream.readNBytes(MAX_LISTING_SIZE + 1);
+        }
+        if (content.length > MAX_LISTING_SIZE) {
+            throw new IOException("Listing is larger than the limit of " + MAX_LISTING_SIZE + " bytes");
+        }
+        if (contentLength >= 0 && content.length < contentLength) {
+            throw new EOFException("Listing has ended after " + content.length + " of " + contentLength + " bytes");
+        }
+        return new String(content, page.charset());
     }
 
 }

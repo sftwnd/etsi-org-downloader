@@ -7,9 +7,13 @@ import lombok.Getter;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -22,8 +26,11 @@ import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.when;
@@ -104,6 +111,52 @@ class TextHtmlProcessorTest extends AbstractFileSourceTest {
         when(this.href.getBytes()).thenReturn(this.bytes + 10);
         var completableFuture = assertDoesNotThrow(() -> this.textHtmlProcessor(this.page).process());
         assertEquals(List.of(), assertDoesNotThrow(completableFuture::join).collect(Collectors.toList()));
+    }
+
+    @Test
+    void processRealListingTest() throws IOException {
+        startUp("etsi-129078");
+        Path actual = Path.of("/deliver/etsi_ts/129000_129099/129078/19.00.00_60");
+        assertEquals(List.of(actual), this.textHtmlProcessor(this.page).process().join().collect(Collectors.toList()));
+        assertEquals(61, this.excluded.size());
+        assertFalse(this.excluded.contains(actual));
+    }
+
+    @Test
+    void processChunkedListingTest() throws IOException {
+        startUp("files");
+        doReturn(-1L).when(this.page).contentLength();
+        assertEquals(FILES_PATHS, this.textHtmlProcessor(this.page).process().join().collect(Collectors.toList()));
+    }
+
+    @Test
+    void processTooLargeDeclaredListingTest() throws IOException {
+        startUp("files");
+        doReturn(TextHtmlProcessor.MAX_LISTING_SIZE + 1L).when(this.page).contentLength();
+        assertEquals(List.of(), this.textHtmlProcessor(this.page).process().join().collect(Collectors.toList()));
+    }
+
+    @Test
+    void processTooLargeChunkedListingTest() throws IOException {
+        startUp("files");
+        doReturn(-1L).when(this.page).contentLength();
+        when(this.page.inputStream()).thenReturn(new InputStream() {
+            @Override
+            public int read() {
+                return 'x';
+            }
+        });
+        assertEquals(List.of(), this.textHtmlProcessor(this.page).process().join().collect(Collectors.toList()));
+    }
+
+    @Test
+    void processBacktrackingLineTest() throws IOException {
+        startUp("files");
+        byte[] line = ("<br> 1/1/2020  1:00 AM 123 <a " + "href=\"\">".repeat(20_000)).getBytes(StandardCharsets.US_ASCII);
+        doReturn((long) line.length).when(this.page).contentLength();
+        when(this.page.inputStream()).thenReturn(new ByteArrayInputStream(line));
+        var result = assertTimeoutPreemptively(Duration.ofSeconds(5), () -> this.textHtmlProcessor(this.page).process().join());
+        assertEquals(List.of(), result.collect(Collectors.toList()));
     }
 
     void processFileTest(@NonNull String name) throws IOException {
