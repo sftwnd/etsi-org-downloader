@@ -3,6 +3,7 @@ package com.github.sftwnd.etsiorg;
 import edu.umd.cs.findbugs.annotations.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
+import java.io.IOException;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
@@ -56,26 +57,35 @@ public class Main {
         }
         Settings settings;
         LinkPolicy linkPolicy;
+        Destination destination;
         try {
             settings = Settings.of(properties, environment);
             linkPolicy = new LinkPolicy(settings.getUri());
+            destination = new Destination(settings.getDest());
         } catch (IllegalArgumentException exception) {
             logger.error("Invalid configuration: {}", Printable.of(exception.getMessage()));
             return INVALID_CONFIGURATION;
         }
-        return mirror(settings, linkPolicy);
+        try {
+            destination.prepare();
+        } catch (IOException ioex) {
+            logger.error("Invalid configuration: destination folder '{}' cannot be written. Cause: {} {}",
+                    Printable.of(destination.getRoot()), ioex.getClass().getSimpleName(), Printable.of(ioex.getMessage()));
+            return INVALID_CONFIGURATION;
+        }
+        return mirror(settings, linkPolicy, destination);
     }
 
     /**
      * Mirror the site folder
      * @param settings settings of the run
      * @param linkPolicy policy of the links inside the site folder
+     * @param destination prepared destination folder
      * @return exit status: {@link #SUCCESS} or {@link #FAILURE}
      */
-    private static int mirror(@NonNull Settings settings, @NonNull LinkPolicy linkPolicy) {
+    private static int mirror(@NonNull Settings settings, @NonNull LinkPolicy linkPolicy, @NonNull Destination destination) {
         ExecutorService executor = Executors.newFixedThreadPool(settings.getThreads());
         try {
-            Destination destination = new Destination(settings.getDest());
             logger.info("Mirroring '{}' to '{}' with {} threads, listing time zone: {}",
                     Printable.of(linkPolicy.getRoot()), Printable.of(destination.getRoot()), settings.getThreads(), settings.getZone());
             var processorFactory = new ComplexProcessorFactory(destination, settings.getZone(), linkPolicy, executor, new ExpiredRemover(destination));

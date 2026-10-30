@@ -3,7 +3,9 @@ package com.github.sftwnd.etsiorg;
 import edu.umd.cs.findbugs.annotations.NonNull;
 import lombok.Getter;
 
+import java.io.IOException;
 import java.net.URI;
+import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.Objects;
@@ -25,6 +27,15 @@ public class Destination {
      */
     public Destination(@NonNull Path root) {
         this.root = Objects.requireNonNull(root, "Destination::new - root is null").toAbsolutePath().normalize();
+    }
+
+    /**
+     * Prepare the destination folder for a run: create it and check that a file can be created in it
+     * @throws IOException if the folder cannot be created or no file can be created in it
+     */
+    public void prepare() throws IOException {
+        Files.createDirectories(this.root);
+        Files.delete(Files.createTempFile(this.root, ".etsiorg-", ".probe"));
     }
 
     /**

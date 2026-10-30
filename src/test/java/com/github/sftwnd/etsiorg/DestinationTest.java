@@ -2,15 +2,27 @@ package com.github.sftwnd.etsiorg;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.io.IOException;
 import java.net.URI;
+import java.nio.file.AccessDeniedException;
+import java.nio.file.FileAlreadyExistsException;
+import java.nio.file.FileSystems;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermissions;
+import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 class DestinationTest {
 
@@ -83,6 +95,47 @@ class DestinationTest {
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
                 () -> this.destination.pathOf(URI.create("https://www.etsi.org/deliver/a%0A%1Bb")));
         assertTrue(Printable.isPrintable(exception.getMessage()), exception.getMessage());
+    }
+
+    @Test
+    void prepareCreatesFolderTest(@TempDir Path tempDir) throws IOException {
+        Path root = tempDir.resolve("mirror").resolve("etsi");
+        new Destination(root).prepare();
+        assertTrue(Files.isDirectory(root));
+        try (Stream<Path> files = Files.list(root)) {
+            assertEquals(List.of(), files.collect(Collectors.toList()));
+        }
+    }
+
+    @Test
+    void prepareExistingFolderTest(@TempDir Path tempDir) throws IOException {
+        Path file = Files.writeString(tempDir.resolve("file.pdf"), "content");
+        new Destination(tempDir).prepare();
+        try (Stream<Path> files = Files.list(tempDir)) {
+            assertEquals(List.of(file), files.collect(Collectors.toList()));
+        }
+    }
+
+    @Test
+    void prepareReadOnlyFolderTest(@TempDir Path tempDir) throws IOException {
+        assumeTrue(FileSystems.getDefault().supportedFileAttributeViews().contains("posix"));
+        Path root = Files.createDirectory(tempDir.resolve("read-only"));
+        Files.setPosixFilePermissions(root, PosixFilePermissions.fromString("r-xr-xr-x"));
+        try {
+            assumeFalse(Files.isWritable(root), "the superuser writes to a read-only folder");
+            Destination destination = new Destination(root);
+            assertThrows(AccessDeniedException.class, destination::prepare);
+            Destination subfolder = new Destination(root.resolve("mirror"));
+            assertThrows(AccessDeniedException.class, subfolder::prepare);
+        } finally {
+            Files.setPosixFilePermissions(root, PosixFilePermissions.fromString("rwxr-xr-x"));
+        }
+    }
+
+    @Test
+    void prepareFileTest(@TempDir Path tempDir) throws IOException {
+        Destination destination = new Destination(Files.createFile(tempDir.resolve("mirror")));
+        assertThrows(FileAlreadyExistsException.class, destination::prepare);
     }
 
     @BeforeEach

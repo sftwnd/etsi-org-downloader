@@ -12,8 +12,10 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
@@ -22,6 +24,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 class MainTest {
 
@@ -32,6 +36,8 @@ class MainTest {
 
     @TempDir
     Path tempDir;
+
+    private final AtomicInteger requests = new AtomicInteger();
 
     @Test
     void runTest() throws Exception {
@@ -82,6 +88,24 @@ class MainTest {
         assertEquals(Main.INVALID_CONFIGURATION, run(Map.of(), Map.of("ETSIORG_ZONE", "Mars/Olympus")));
     }
 
+    @Test
+    void readOnlyDestinationTest() throws Exception {
+        assumeTrue(FileSystems.getDefault().supportedFileAttributeViews().contains("posix"));
+        HttpServer server = server(true, new AtomicInteger());
+        Path dest = Files.createDirectory(this.tempDir.resolve("read-only"));
+        Files.setPosixFilePermissions(dest, PosixFilePermissions.fromString("r-xr-xr-x"));
+        try {
+            assumeFalse(Files.isWritable(dest), "the superuser writes to a read-only folder");
+            Map<String, String> properties = new HashMap<>(properties(server));
+            properties.put("dest", dest.toString());
+            assertEquals(Main.INVALID_CONFIGURATION, run(properties, Map.of()));
+            assertEquals(0, this.requests.get());
+        } finally {
+            Files.setPosixFilePermissions(dest, PosixFilePermissions.fromString("rwxr-xr-x"));
+            server.stop(0);
+        }
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"-h", "--help"})
     void helpTest(String argument) {
@@ -116,7 +140,7 @@ class MainTest {
     /**
      * Local site with the listing {@code files.html} sent in chunks and its two files, or with nothing at all
      */
-    private static HttpServer server(boolean available, AtomicInteger fileRequests) throws IOException {
+    private HttpServer server(boolean available, AtomicInteger fileRequests) throws IOException {
         byte[] listing;
         try (InputStream inputStream = MainTest.class.getClassLoader().getResourceAsStream("files.html")) {
             assertNotNull(inputStream);
@@ -124,6 +148,7 @@ class MainTest {
         }
         HttpServer server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
         server.createContext("/", exchange -> {
+            this.requests.incrementAndGet();
             String path = exchange.getRequestURI().getPath();
             Integer size = FILES.get(path);
             if (available && FOLDER.equals(path)) {
