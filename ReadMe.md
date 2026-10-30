@@ -112,12 +112,13 @@ failed: K` and the exit status:
 docker compose up --build
 ```
 
-The image is built from the sources with `./mvnw` without the tests, which run in continuous integration, and runs the
-downloader as a non-root user (UID 10001) with a read-only file system. Only the destination folder is mounted, at
-`/data`: `./mirror` of the project folder, or the host folder `ETSIORG_MIRROR` names in the environment or in `.env`,
+The image is built from the sources with `./mvnw` without the tests, which run in continuous integration. It holds a
+Java runtime linked by `jlink` from the modules of the downloader on `gcr.io/distroless/base-debian12`, about 60 MB, and
+runs the module as the user `nonroot` (UID 65532) with a read-only file system. Only the destination folder is mounted,
+at `/data`: `./mirror` of the project folder, or the host folder `ETSIORG_MIRROR` names in the environment or in `.env`,
 e.g. `ETSIORG_MIRROR=/srv/etsi docker compose up`. The files are stored under their path on the site,
 `mirror/deliver/...`. On Linux create the folder and make it writable for the user before the first start, e.g.
-`mkdir -p mirror && sudo chown 10001 mirror`; otherwise the run stops at once with the status 2. A mirror made by an
+`mkdir -p mirror && sudo chown 65532 mirror`; otherwise the run stops at once with the status 2. A mirror made by an
 earlier version in `./deliver` of the project folder is moved once: `mkdir -p mirror && mv deliver mirror/`. The log of
 the container is not colored: the image sets `NO_COLOR=1`. A run logs a line per file, so the log is rotated: at most
 five files of 10 MB (`logging` in `docker-compose.yml`), and `docker logs` shows what they hold.
@@ -147,7 +148,8 @@ docker rmi sftwnd/etsi-org:1.0
 ## Architecture
 
 The architecture decisions are recorded in [docs/adr](docs/adr/README.md) in English and in Russian
-([docs/adr/ru](docs/adr/ru/README.md)); [ADR-0004](docs/adr/0004-bounded-executor.md) contains the C4 component diagram.
+([docs/adr/ru](docs/adr/ru/README.md)); [ADR-0004](docs/adr/0004-bounded-executor.md) contains the C4 component diagram,
+[ADR-0017](docs/adr/0017-jlink-runtime-image.md) the deployment diagram.
 
 ## License
 

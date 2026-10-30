@@ -45,6 +45,14 @@ jobs:
           persist-credentials: false
       - name: Build the image
         run: docker compose build
+      - name: Check the modules of the runtime
+        # jlink adds the modules bound as services only if they are named: logback and the elliptic curves of TLS
+        run: |
+          modules=$(docker compose run --rm -T --entrypoint /opt/etsiorg/bin/java etsiorg --list-modules)
+          echo "${modules}"
+          for module in com.github.sftwnd.etsiorg org.slf4j ch.qos.logback.classic jdk.crypto.ec; do
+            grep -q "^${module}@" <<< "${modules}" || { echo "Module ${module} is missing" >&2; exit 1; }
+          done
       - name: Start the downloader
         # an invalid configuration ends the run with status 2 before any request: the JVM, the jar and the logging
         # configuration of the image are checked without the network

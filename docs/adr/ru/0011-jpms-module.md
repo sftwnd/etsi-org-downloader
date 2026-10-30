@@ -2,6 +2,7 @@
 
 - Статус: Принято
 - Дата: 2026-10-30
+- Изменено: 2026-10-30 — образ запускает модуль в среде, собранной jlink (#60)
 - Версия на английском: [ADR-0011](../0011-jpms-module.md)
 
 ## Контекст
@@ -20,7 +21,7 @@
 - Jar проекта — модульный: `maven-jar-plugin` записывает главный класс в дескриптор модуля, а `maven-dependency-plugin`
   копирует модули времени выполнения в `target/lib`. Запуск:
   `java --module-path target/etsiorg-downloader-<version>.jar:target/lib --module com.github.sftwnd.etsiorg`.
-- Fat jar остаётся jar для classpath (`run.sh`, Docker): собственный дескриптор сборки повторяет `jar-with-dependencies`
+- Fat jar остаётся jar для classpath (`run.sh`): собственный дескриптор сборки повторяет `jar-with-dependencies`
   без `module-info.class`.
 - Тесты выполняются на module path внутри модуля; то, что им нужно сверх дескриптора, выдаётся только им: компилятору —
   `jdk.httpserver` и `java.xml`, Surefire — чтение `jdk.httpserver` и logback.
@@ -40,7 +41,8 @@
 
 ## Последствия
 
-- Есть два способа запуска: fat jar на classpath (`run.sh`, Docker) и модуль на module path.
+- Есть два способа запуска: fat jar на classpath (`run.sh`) и модуль на module path; образ запускает модуль в среде,
+  собранной jlink ([ADR-0017](0017-jlink-runtime-image.md)).
 - Новая зависимость кода требует `requires` в `module-info.java`; новая зависимость тестов за пределами модуля может
   потребовать `--add-reads` или `--add-modules` в `pom.xml`.
 - `./mvnw verify` идёт на несколько секунд дольше: он дважды запускает загрузчик.
