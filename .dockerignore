@@ -1,6 +1,7 @@
 # Only the build sources go to the build context: not the mirror, the build output or the repository
 *
-!.settings.xml
+!.mvn/
+!mvnw
 !pom.xml
 !lombok.config
 !src/
