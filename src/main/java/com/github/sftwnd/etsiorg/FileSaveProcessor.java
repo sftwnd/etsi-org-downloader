@@ -35,11 +35,11 @@ public class FileSaveProcessor implements Processor<CompletableFuture<Stream<Pat
 
     private static final int BUFFER_SIZE = 64 << 10;
 
-    private final String root;
+    private final Destination destination;
     private final Page page;
 
-    FileSaveProcessor(@NonNull Path root, @NonNull Page page) {
-        this.root = Objects.requireNonNull(root, "FileSaveProcessor::new - path is null").toString();
+    FileSaveProcessor(@NonNull Destination destination, @NonNull Page page) {
+        this.destination = Objects.requireNonNull(destination, "FileSaveProcessor::new - destination is null");
         this.page = Objects.requireNonNull(page, "FileSaveProcessor::new - page is null");
     }
 
@@ -60,10 +60,16 @@ public class FileSaveProcessor implements Processor<CompletableFuture<Stream<Pat
     @SneakyThrows
     private @Nullable Path saveFile() {
         final Page page = this.getPage();
-        final Path filePath = Path.of(this.getRoot(), page.path().toString());
+        final Path filePath;
         try {
-            if (checkFolder()) {
-                long readed = checkFile();
+            filePath = this.getDestination().pathOf(page.getUri());
+        } catch (IllegalArgumentException iaex) {
+            logger.error("Unable to save file. {}", iaex.getMessage());
+            return null;
+        }
+        try {
+            if (checkFolder(filePath)) {
+                long readed = checkFile(filePath);
                 if (readed != -1) {
                     try (var outputStream = Files.newOutputStream(filePath, WRITE, CREATE, readed == 0 ? TRUNCATE_EXISTING : APPEND)) {
                         byte[] buff = new byte[BUFFER_SIZE];
@@ -113,11 +119,11 @@ public class FileSaveProcessor implements Processor<CompletableFuture<Stream<Pat
 
     /**
      * Try to check file for existence
+     * @param filePath local path of the file
      * @return 0 if the file needs to be loaded from the very beginning, a positive offset if it is necessary to continue loading and -1 if loading is not required or impossible
      */
-    private synchronized long checkFile() throws IOException {
+    private synchronized long checkFile(@NonNull Path filePath) throws IOException {
         Page page = this.getPage();
-        Path filePath = Path.of(this.getRoot(), page.path().toString());
         long contentLength = page.contentLength();
         if (Files.exists(filePath)) {
             if (Files.isRegularFile(filePath)) {
@@ -159,10 +165,11 @@ public class FileSaveProcessor implements Processor<CompletableFuture<Stream<Pat
 
     /**
      * Try to find the folder and create it if it is not found
+     * @param filePath local path of the file
      * @return false if unable to create folder
      */
-    private synchronized boolean checkFolder() {
-        Path folderPath = Path.of(this.getRoot(), this.getPage().path().toString()).getParent();
+    private synchronized boolean checkFolder(@NonNull Path filePath) {
+        Path folderPath = filePath.getParent();
         if (folderPath != null) {
             if (Files.exists(folderPath)) {
                 if (Files.isRegularFile(folderPath)) {

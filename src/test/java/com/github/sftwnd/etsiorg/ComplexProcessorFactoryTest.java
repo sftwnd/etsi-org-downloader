@@ -6,6 +6,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
+import java.net.URI;
 import java.nio.file.Path;
 import java.util.Collection;
 import java.util.concurrent.Executor;
@@ -44,7 +45,7 @@ class ComplexProcessorFactoryTest {
         assertEquals(FileSaveProcessor.class, processor.getClass());
         FileSaveProcessor fileSaveProcessor = (FileSaveProcessor)processor;
         assertEquals(this.page, fileSaveProcessor.getPage());
-        assertEquals(this.root.toString(), fileSaveProcessor.getRoot());
+        assertSame(this.destination, fileSaveProcessor.getDestination());
     }
 
     @Test
@@ -63,13 +64,13 @@ class ComplexProcessorFactoryTest {
     }
 
     @Test
-    void nullRootConstructorTest() {
+    void nullDestinationConstructorTest() {
         assertThrows(NullPointerException.class, () -> new ComplexProcessorFactory(null, this.executor, this.onExpires));
     }
 
     @Test
-    void getRootTest() {
-        assertSame(this.root, this.factory.getRoot());
+    void getDestinationTest() {
+        assertSame(this.destination, this.factory.getDestination());
     }
 
     @Test
@@ -88,17 +89,17 @@ class ComplexProcessorFactoryTest {
         this.href = mock(HREF.class);
         this.page = mock(Page.class);
         when(this.page.getHref()).thenReturn(this.href);
-        this.root = mock(Path.class);
+        this.destination = new Destination(Path.of("target"));
         this.executor = mock(Executor.class);
-        this.onExpires = (Consumer<Collection<Path>>)Mockito.mock(Consumer.class);
-        this.factory = spy(new ComplexProcessorFactory(this.root, this.executor, this.onExpires));
+        this.onExpires = (Consumer<Collection<URI>>)Mockito.mock(Consumer.class);
+        this.factory = spy(new ComplexProcessorFactory(this.destination, this.executor, this.onExpires));
     }
 
     @AfterEach
     void tearDown() {
         this.href = null;
         this.page = null;
-        this.root = null;
+        this.destination = null;
         this.executor = null;
         this.onExpires = null;
         this.factory = null;
@@ -106,9 +107,9 @@ class ComplexProcessorFactoryTest {
 
     private HREF href;
     private Page page;
-    private Path root;
+    private Destination destination;
     private Executor executor;
-    private Consumer<Collection<Path>> onExpires;
+    private Consumer<Collection<URI>> onExpires;
     private ComplexProcessorFactory factory;
 
 }
