@@ -178,8 +178,9 @@ class FileSaveProcessorTest extends AbstractFileSourceTest {
         Files.createDirectories(this.part.getParent());
         Files.write(this.part, partial);
         clearInvocations(this.page);
-        try (FileChannel channel = FileChannel.open(this.part, StandardOpenOption.WRITE); FileLock ignored = channel.lock()) {
+        try (FileChannel channel = FileChannel.open(this.part, StandardOpenOption.WRITE); FileLock lock = channel.lock()) {
             assertEquals(Summary.EMPTY, process());
+            assertTrue(lock.isValid());
         }
         assertTrue(Files.notExists(this.target));
         assertArrayEquals(partial, Files.readAllBytes(this.part));

@@ -31,16 +31,24 @@
         <maven.compiler.source>11</maven.compiler.source>
         <maven.compiler.target>11</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <logback.version>1.5.38</logback.version>
-        <lombok.version>1.18.30</lombok.version>
-        <slf4j.version>2.0.17</slf4j.version>
-        <spotbugs-annotations.version>4.8.3</spotbugs-annotations.version>
-        <junit.version>5.10.2</junit.version>
-        <mockito.version>5.11.0</mockito.version>
-        <maven-assembly-plugin.version>3.7.0</maven-assembly-plugin.version>
-        <maven-compiler-plugin.version>3.12.1</maven-compiler-plugin.version>
-        <maven-clean-plugin.version>3.3.2</maven-clean-plugin.version>
-        <maven-jar-plugin.version>3.3.0</maven-jar-plugin.version>
+        <!-- the latest releases that support Java 11: no alpha and beta versions, no 4.0.0 plugins (they require Maven 4) -->
+        <!-- logback 1.6 is built for Java 11 -->
+        <logback.version>1.6.6</logback.version>
+        <lombok.version>1.18.48</lombok.version>
+        <slf4j.version>2.0.20</slf4j.version>
+        <spotbugs-annotations.version>4.10.5</spotbugs-annotations.version>
+        <!-- JUnit 6 requires Java 17 -->
+        <junit.version>5.14.4</junit.version>
+        <!-- Mockito 5 is built for Java 11 -->
+        <mockito.version>5.24.0</mockito.version>
+        <maven-assembly-plugin.version>3.8.0</maven-assembly-plugin.version>
+        <maven-clean-plugin.version>3.5.0</maven-clean-plugin.version>
+        <maven-compiler-plugin.version>3.16.0</maven-compiler-plugin.version>
+        <maven-deploy-plugin.version>3.2.0</maven-deploy-plugin.version>
+        <maven-install-plugin.version>3.2.0</maven-install-plugin.version>
+        <maven-jar-plugin.version>3.5.1</maven-jar-plugin.version>
+        <maven-resources-plugin.version>3.5.0</maven-resources-plugin.version>
+        <maven-surefire-plugin.version>3.6.1</maven-surefire-plugin.version>
     </properties>
 
     <dependencies>
@@ -72,6 +80,11 @@
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-params</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-engine</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -160,6 +173,7 @@
         </plugins>
 
         <pluginManagement>
+            <!-- every plugin of the lifecycle is pinned: the defaults of the super POM depend on the Maven version -->
             <plugins>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
@@ -178,8 +192,28 @@
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-deploy-plugin</artifactId>
+                    <version>${maven-deploy-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-install-plugin</artifactId>
+                    <version>${maven-install-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-jar-plugin</artifactId>
                     <version>${maven-jar-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-resources-plugin</artifactId>
+                    <version>${maven-resources-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <version>${maven-surefire-plugin.version}</version>
                 </plugin>
             </plugins>
         </pluginManagement>
