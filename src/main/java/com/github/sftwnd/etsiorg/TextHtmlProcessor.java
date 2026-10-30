@@ -22,7 +22,6 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
-import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.regex.Matcher;
@@ -43,7 +42,7 @@ public class TextHtmlProcessor implements Processor<CompletableFuture<Summary>> 
     private final ProcessorFactory<CompletableFuture<Summary>> processorFactory;
     private final LinkPolicy linkPolicy;
     private final Executor executor;
-    private final Consumer<Collection<URI>> onExpires;
+    private final Function<Collection<URI>, Summary> onExpires;
 
     /**
      * Constructor of Text Html Processor
@@ -51,13 +50,13 @@ public class TextHtmlProcessor implements Processor<CompletableFuture<Summary>> 
      * @param processorFactory factory for processor resource
      * @param linkPolicy policy of the links to follow
      * @param executor executor of the resource processing: listings and downloads run in its threads
-     * @param onExpires listener for the expired resources
+     * @param onExpires handler of the expired resources with the summary of their removal
      */
     TextHtmlProcessor(@NonNull Page page,
                       @NonNull ProcessorFactory<CompletableFuture<Summary>> processorFactory,
                       @NonNull LinkPolicy linkPolicy,
                       @NonNull Executor executor,
-                      @Nullable Consumer<Collection<URI>> onExpires) {
+                      @Nullable Function<Collection<URI>, Summary> onExpires) {
         this.page = Objects.requireNonNull(page, "TextHtmlProcessor::new - page is null");
         this.processorFactory = Objects.requireNonNull(processorFactory, "TextHtmlProcessor::new - processorFactory is null");
         this.linkPolicy = Objects.requireNonNull(linkPolicy, "TextHtmlProcessor::new - linkPolicy is null");
@@ -105,8 +104,7 @@ public class TextHtmlProcessor implements Processor<CompletableFuture<Summary>> 
                 return summary;
             }
             try {
-                this.getOnExpires().accept(expired);
-                return summary;
+                return summary.plus(this.getOnExpires().apply(expired));
             } catch (RuntimeException rex) {
                 logger.error("Unable to remove expired versions of: '{}'. Cause: {} {}", Printable.of(actual.path()), rex.getClass().getSimpleName(), Printable.of(rex.getMessage()));
                 return summary.plus(Summary.FAILED);

@@ -11,7 +11,7 @@ import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
@@ -30,9 +30,19 @@ class ExpiredRemoverTest {
         Files.createDirectories(version.resolve("nested"));
         Files.writeString(version.resolve("ts.pdf"), "pdf");
         Files.writeString(version.resolve("nested").resolve("ts.zip"), "zip");
-        this.remover.accept(List.of(SITE.resolve(VERSION)));
+        assertEquals(Summary.removed(1), this.remover.apply(List.of(SITE.resolve(VERSION))));
         assertTrue(Files.notExists(version));
         assertTrue(Files.exists(version.getParent()));
+    }
+
+    @Test
+    void planTest() throws IOException {
+        Path version = this.mirror.resolve(VERSION);
+        Files.createDirectories(version);
+        Path file = Files.writeString(version.resolve("ts.pdf"), "pdf");
+        URI missing = SITE.resolve("deliver/etsi_ts/129000_129099/129011/15.00.00_60/");
+        assertEquals(Summary.removed(1), this.remover.plan(List.of(SITE.resolve(VERSION), missing)));
+        assertTrue(Files.exists(file));
     }
 
     @Test
@@ -40,7 +50,7 @@ class ExpiredRemoverTest {
         Path version = Files.createDirectories(this.mirror.resolve(VERSION));
         Files.writeString(version.resolve("ts.pdf"), "pdf");
         assumeTrue(link(version.resolve("docs"), this.outside));
-        this.remover.accept(List.of(SITE.resolve(VERSION)));
+        this.remover.apply(List.of(SITE.resolve(VERSION)));
         assertTrue(Files.notExists(version, LinkOption.NOFOLLOW_LINKS));
         assertTrue(Files.exists(this.outsideFile));
     }
@@ -50,7 +60,7 @@ class ExpiredRemoverTest {
         Path version = this.mirror.resolve(VERSION);
         Files.createDirectories(version.getParent());
         assumeTrue(link(version, this.outside));
-        this.remover.accept(List.of(SITE.resolve(VERSION)));
+        this.remover.apply(List.of(SITE.resolve(VERSION)));
         assertTrue(Files.notExists(version, LinkOption.NOFOLLOW_LINKS));
         assertTrue(Files.exists(this.outsideFile));
     }
@@ -60,19 +70,20 @@ class ExpiredRemoverTest {
         Path version = this.mirror.resolve(VERSION);
         Files.createDirectories(version.getParent());
         assumeTrue(link(version, this.tempDir.resolve("missing")));
-        this.remover.accept(List.of(SITE.resolve(VERSION)));
+        this.remover.apply(List.of(SITE.resolve(VERSION)));
         assertTrue(Files.notExists(version, LinkOption.NOFOLLOW_LINKS));
     }
 
     @Test
     void pathOutsideDestinationIsSkippedTest() {
-        this.remover.accept(List.of(SITE.resolve("/../outside/")));
+        this.remover.apply(List.of(SITE.resolve("/../outside/")));
         assertTrue(Files.exists(this.outsideFile));
     }
 
     @Test
     void missingPathTest() {
-        assertDoesNotThrow(() -> this.remover.accept(List.of(SITE.resolve(VERSION))));
+        assertEquals(Summary.EMPTY, this.remover.apply(List.of(SITE.resolve(VERSION))));
+        assertEquals(Summary.EMPTY, this.remover.plan(List.of(SITE.resolve(VERSION))));
     }
 
     @Test

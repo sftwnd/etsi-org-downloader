@@ -2,8 +2,8 @@
 
 - Статус: Принято
 - Дата: 2026-10-30
-- Изменено: 2026-10-30 — по умолчанию 4 потока вместо числа процессоров (#57); `Settings` и `RunLock` на диаграмме
-  компонентов (#61, #62)
+- Изменено: 2026-10-30 — по умолчанию 4 потока вместо числа процессоров (#57); `Settings`, `RunLock` и пробный прогон
+  на диаграмме компонентов (#61, #62, #64)
 - Версия на английском: [ADR-0004](../0004-bounded-executor.md)
 
 ## Контекст
@@ -63,10 +63,10 @@ C4Component
         Component(policy, "LinkPolicy", "Java", "Допустимые ссылки, посещённые ресурсы")
         Component(factory, "ComplexProcessorFactory", "Java", "Выбор обработчика ресурса")
         Component(html, "TextHtmlProcessor", "Java", "Разбор листинга, выбор версии, обход детей в пуле")
-        Component(file, "FileSaveProcessor", "Java", "Скачивание файла с докачкой")
+        Component(file, "FileSaveProcessor", "Java", "Скачивание файла с докачкой или его план в пробном прогоне")
         Component(page, "Page", "Java", "HTTP: таймауты, повторы, Range")
         Component(dest, "Destination", "Java", "URI в путь внутри папки назначения")
-        Component(remover, "ExpiredRemover", "Java", "Удаление устаревших версий")
+        Component(remover, "ExpiredRemover", "Java", "Удаление устаревших версий или его план в пробном прогоне")
         Component(lock, "RunLock", "Java", "Один прогон одновременно на папку назначения")
     }
     ContainerDb(fs, "Папка назначения", "Файловая система", "Зеркало deliver/...")

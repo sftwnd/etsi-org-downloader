@@ -65,6 +65,15 @@ ETSIORG_URI=https://www.etsi.org/deliver/etsi_ts/ ETSIORG_DEST=/data/etsi ./run.
 | `-Ddest`    | `ETSIORG_DEST`       | `.`                             | Destination folder; files are stored under their path on the site   |
 | `-Dthreads` | `ETSIORG_THREADS`    | `4`                             | Threads that process listings and files, i.e. simultaneous requests |
 | `-Dzone`    | `ETSIORG_ZONE`       | `UTC`                           | Time zone of the listing time; www.etsi.org lists it in UTC         |
+| `-Ddry-run` | `ETSIORG_DRY_RUN`    | `false`                         | `true`: report what a run would download and remove, change nothing |
+
+A dry run walks the listings and reports the files to download with their size, the expired versions to remove and
+the free space of the destination folder; it downloads, removes and creates nothing, so it needs no write access and
+runs next to a running run:
+
+```console
+./run.sh -Ddry-run=true
+```
 
 The log is colored for a terminal. As [no-color.org](https://no-color.org) suggests, `NO_COLOR` set to a non-empty value
 turns the colors off, e.g. for a log written to a file: `NO_COLOR=1 ./run.sh > mirror.log`.
@@ -86,7 +95,8 @@ java -Dlogback.configurationFile=src/main/resources/logback.xml -Duri=https://ww
 
 A run can be interrupted at any moment: the next run resumes the unfinished downloads. One run at a time mirrors to
 a destination folder: it holds a lock of the operating system on the file `.etsiorg-downloader.lock` there, which stays
-in the folder. A run ends with the summary `Files downloaded: N, up to date: M, failed: K` and the exit status:
+in the folder. A run ends with the summary `Files downloaded: N (size), up to date: M, expired versions removed: R,
+failed: K` and the exit status:
 
 | Status | Meaning                                                                                                                                                             |
 |--------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -112,11 +122,13 @@ the container is not colored: the image sets `NO_COLOR=1`. A run logs a line per
 five files of 10 MB (`logging` in `docker-compose.yml`), and `docker logs` shows what they hold.
 
 The settings are environment variables: the image sets `ETSIORG_DEST=/data`, and `docker-compose.yml` passes
-`ETSIORG_URI`, `ETSIORG_THREADS` and `ETSIORG_ZONE` from the environment of docker compose or from `.env`:
+`ETSIORG_URI`, `ETSIORG_THREADS`, `ETSIORG_ZONE` and `ETSIORG_DRY_RUN` from the environment of docker compose
+or from `.env`:
 
 ```console
 ETSIORG_URI=https://www.etsi.org/deliver/etsi_ts/ ETSIORG_THREADS=2 docker compose up
 docker compose run --rm -e ETSIORG_URI=https://www.etsi.org/deliver/etsi_ts/ etsiorg
+docker compose run --rm -e ETSIORG_DRY_RUN=true etsiorg
 docker compose run --rm etsiorg --help
 ```
 

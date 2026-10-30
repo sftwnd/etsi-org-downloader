@@ -53,7 +53,8 @@ public final class Settings {
         URI("uri", "site folder to mirror; only links inside it are followed", DEFAULT_URI),
         DEST("dest", "destination folder; files are stored under their path on the site", "the current folder"),
         THREADS("threads", "threads that process listings and files, i.e. simultaneous requests", String.valueOf(DEFAULT_THREADS)),
-        ZONE("zone", "time zone of the listing time; www.etsi.org lists it in UTC", "UTC");
+        ZONE("zone", "time zone of the listing time; www.etsi.org lists it in UTC", "UTC"),
+        DRY_RUN("dry-run", "true: walk the listings and report what a run would download and remove, changing nothing", "false");
 
         private final String property;
         private final String meaning;
@@ -101,11 +102,17 @@ public final class Settings {
      */
     private final @NonNull ZoneId zone;
 
-    private Settings(@NonNull URI uri, @NonNull Path dest, int threads, @NonNull ZoneId zone) {
+    /**
+     * Dry run: the listings are walked, nothing is downloaded, removed or created
+     */
+    private final boolean dryRun;
+
+    private Settings(@NonNull URI uri, @NonNull Path dest, int threads, @NonNull ZoneId zone, boolean dryRun) {
         this.uri = uri;
         this.dest = dest;
         this.threads = threads;
         this.zone = zone;
+        this.dryRun = dryRun;
     }
 
     /**
@@ -122,7 +129,8 @@ public final class Settings {
                 uri(value(Key.URI, properties, environment)),
                 dest(value(Key.DEST, properties, environment)),
                 threads(value(Key.THREADS, properties, environment)),
-                zone(value(Key.ZONE, properties, environment)));
+                zone(value(Key.ZONE, properties, environment)),
+                dryRun(value(Key.DRY_RUN, properties, environment)));
     }
 
     /**
@@ -212,6 +220,22 @@ public final class Settings {
         } catch (DateTimeException dtex) {
             throw new IllegalArgumentException("Unknown time zone: " + Printable.of(value), dtex);
         }
+    }
+
+    /**
+     * Dry run
+     * @param value trimmed value of the setting or null
+     * @return true for {@code true} in any case, false by default
+     * @throws IllegalArgumentException if the value is neither {@code true} nor {@code false}
+     */
+    private static boolean dryRun(@Nullable String value) {
+        if (value == null || Boolean.FALSE.toString().equalsIgnoreCase(value)) {
+            return false;
+        }
+        if (Boolean.TRUE.toString().equalsIgnoreCase(value)) {
+            return true;
+        }
+        throw new IllegalArgumentException("Dry run has to be true or false: " + Printable.of(value));
     }
 
 }

@@ -11,6 +11,7 @@ services:
       - ETSIORG_URI
       - ETSIORG_THREADS
       - ETSIORG_ZONE
+      - ETSIORG_DRY_RUN
     read_only: true
     tmpfs:
       - /tmp

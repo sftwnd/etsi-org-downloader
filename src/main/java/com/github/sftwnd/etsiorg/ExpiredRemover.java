@@ -14,10 +14,12 @@ import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Collection;
+import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * Removes the local copies of the expired resources. Symbolic links are removed themselves and are never followed,
@@ -25,7 +27,7 @@ import java.util.function.Consumer;
  */
 @Slf4j
 @Getter
-public class ExpiredRemover implements Consumer<Collection<URI>> {
+public class ExpiredRemover implements Function<Collection<URI>, Summary> {
 
     private final Destination destination;
 
@@ -40,14 +42,38 @@ public class ExpiredRemover implements Consumer<Collection<URI>> {
     /**
      * Remove the local copies of the expired resources
      * @param expires uris of the expired resources
+     * @return summary with the number of the removed local copies
      */
     @Override
-    public void accept(@NonNull Collection<URI> expires) {
-        Objects.requireNonNull(expires, "ExpiredRemover::accept - expires is null").stream()
+    public @NonNull Summary apply(@NonNull Collection<URI> expires) {
+        return Summary.removed(localCopies(Objects.requireNonNull(expires, "ExpiredRemover::apply - expires is null")).stream()
+                .filter(this::remove)
+                .count());
+    }
+
+    /**
+     * What {@link #apply(Collection)} would remove, without changes
+     * @param expires uris of the expired resources
+     * @return summary with the number of the local copies to remove
+     */
+    public @NonNull Summary plan(@NonNull Collection<URI> expires) {
+        List<Path> localCopies = localCopies(Objects.requireNonNull(expires, "ExpiredRemover::plan - expires is null"));
+        localCopies.forEach(expired -> logger.info("Expired path is to be removed: '{}'", Printable.of(expired)));
+        return Summary.removed(localCopies.size());
+    }
+
+    /**
+     * Existing local copies of the expired resources
+     * @param expires uris of the expired resources
+     * @return sorted local paths that exist, symbolic links included
+     */
+    private @NonNull List<Path> localCopies(@NonNull Collection<URI> expires) {
+        return expires.stream()
                 .map(this::localPath)
                 .flatMap(Optional::stream)
+                .filter(path -> Files.exists(path, LinkOption.NOFOLLOW_LINKS))
                 .sorted()
-                .forEach(this::remove);
+                .collect(Collectors.toList());
     }
 
     /**
@@ -67,11 +93,9 @@ public class ExpiredRemover implements Consumer<Collection<URI>> {
     /**
      * Remove the file, the link or the directory tree without following symbolic links
      * @param expired local path of the expired resource
+     * @return true if the tree has been walked; a path that cannot be removed in it is reported
      */
-    private void remove(@NonNull Path expired) {
-        if (Files.notExists(expired, LinkOption.NOFOLLOW_LINKS)) {
-            return;
-        }
+    private boolean remove(@NonNull Path expired) {
         try {
             Files.walkFileTree(expired, new SimpleFileVisitor<>() {
                 @Override
@@ -96,8 +120,10 @@ public class ExpiredRemover implements Consumer<Collection<URI>> {
                 }
             });
             logger.info("Expired path has been removed: '{}'", Printable.of(expired));
+            return true;
         } catch (IOException ioex) {
             logger.warn("Unable to remove expired path: '{}'. Cause: {} {}", Printable.of(expired), ioex.getClass().getSimpleName(), Printable.of(ioex.getMessage()));
+            return false;
         }
     }
 

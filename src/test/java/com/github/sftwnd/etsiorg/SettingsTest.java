@@ -12,6 +12,7 @@ import java.util.Locale;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -24,6 +25,14 @@ class SettingsTest {
         assertEquals(Path.of("."), settings.getDest());
         assertEquals(4, settings.getThreads());
         assertEquals(ZoneOffset.UTC, settings.getZone());
+        assertFalse(settings.isDryRun());
+    }
+
+    @Test
+    void dryRunTest() {
+        assertTrue(settings(Map.of("dry-run", "true"), Map.of()).isDryRun());
+        assertTrue(settings(Map.of(), Map.of("ETSIORG_DRY_RUN", " TRUE ")).isDryRun());
+        assertFalse(settings(Map.of("dry-run", "False"), Map.of("ETSIORG_DRY_RUN", "true")).isDryRun());
     }
 
     @Test
@@ -84,9 +93,10 @@ class SettingsTest {
     @CsvSource({
             "uri, https://www.etsi.org/de liver/",
             "threads, 0", "threads, -1", "threads, four", "threads, 1.5", "threads, 99999999999",
-            "zone, Mars/Olympus", "zone, +25:00", "zone, UTC+"})
+            "zone, Mars/Olympus", "zone, +25:00", "zone, UTC+",
+            "dry-run, yes", "dry-run, 1"})
     void invalidValueTest(String property, String value) {
-        String variable = Settings.Key.valueOf(property.toUpperCase(Locale.ROOT)).variable();
+        String variable = Settings.Key.valueOf(property.toUpperCase(Locale.ROOT).replace('-', '_')).variable();
         assertThrows(IllegalArgumentException.class, () -> settings(Map.of(property, value), Map.of()));
         assertThrows(IllegalArgumentException.class, () -> settings(Map.of(), Map.of(variable, value)));
     }

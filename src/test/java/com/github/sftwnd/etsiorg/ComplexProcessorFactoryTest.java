@@ -7,11 +7,10 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 import java.net.URI;
-import java.nio.file.Path;
-import java.time.ZoneId;
 import java.util.Collection;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
-import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -21,6 +20,8 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class ComplexProcessorFactoryTest {
@@ -41,13 +42,8 @@ class ComplexProcessorFactoryTest {
         when(href.isRegularFile()).thenReturn(true);
         when(page.fileName()).thenReturn("file.pdf");
         assertDoesNotThrow(() -> this.factory.processor(this.page));
-        var processor = this.factory.processor(this.page);
-        assertNotNull(processor);
-        assertEquals(FileSaveProcessor.class, processor.getClass());
-        FileSaveProcessor fileSaveProcessor = (FileSaveProcessor)processor;
-        assertEquals(this.page, fileSaveProcessor.getPage());
-        assertSame(this.destination, fileSaveProcessor.getDestination());
-        assertSame(this.zone, fileSaveProcessor.getZone());
+        assertSame(this.fileProcessor, this.factory.processor(this.page));
+        verify(this.files, times(2)).processor(this.page);
     }
 
     @Test
@@ -67,23 +63,18 @@ class ComplexProcessorFactoryTest {
     }
 
     @Test
-    void nullDestinationConstructorTest() {
-        assertThrows(NullPointerException.class, () -> new ComplexProcessorFactory(null, this.zone, this.linkPolicy, this.executor, this.onExpires));
-    }
-
-    @Test
-    void nullZoneConstructorTest() {
-        assertThrows(NullPointerException.class, () -> new ComplexProcessorFactory(this.destination, null, this.linkPolicy, this.executor, this.onExpires));
+    void nullFilesConstructorTest() {
+        assertThrows(NullPointerException.class, () -> new ComplexProcessorFactory(null, this.linkPolicy, this.executor, this.onExpires));
     }
 
     @Test
     void nullExecutorConstructorTest() {
-        assertThrows(NullPointerException.class, () -> new ComplexProcessorFactory(this.destination, this.zone, this.linkPolicy, null, this.onExpires));
+        assertThrows(NullPointerException.class, () -> new ComplexProcessorFactory(this.files, this.linkPolicy, null, this.onExpires));
     }
 
     @Test
     void nullLinkPolicyConstructorTest() {
-        assertThrows(NullPointerException.class, () -> new ComplexProcessorFactory(this.destination, this.zone, null, this.executor, this.onExpires));
+        assertThrows(NullPointerException.class, () -> new ComplexProcessorFactory(this.files, null, this.executor, this.onExpires));
     }
 
     @Test
@@ -92,8 +83,8 @@ class ComplexProcessorFactoryTest {
     }
 
     @Test
-    void getDestinationTest() {
-        assertSame(this.destination, this.factory.getDestination());
+    void getFilesTest() {
+        assertSame(this.files, this.factory.getFiles());
     }
 
     @Test
@@ -112,19 +103,21 @@ class ComplexProcessorFactoryTest {
         this.href = mock(HREF.class);
         this.page = mock(Page.class);
         when(this.page.getHref()).thenReturn(this.href);
-        this.destination = new Destination(Path.of("target"));
+        this.fileProcessor = (Processor<CompletableFuture<Summary>>) mock(Processor.class);
+        this.files = (ProcessorFactory<CompletableFuture<Summary>>) mock(ProcessorFactory.class);
+        when(this.files.processor(this.page)).thenReturn(this.fileProcessor);
         this.linkPolicy = new LinkPolicy(URI.create("http://localhost/deliver/"));
         this.executor = mock(Executor.class);
-        this.onExpires = (Consumer<Collection<URI>>)Mockito.mock(Consumer.class);
-        this.zone = ZoneId.of("Europe/Paris");
-        this.factory = spy(new ComplexProcessorFactory(this.destination, this.zone, this.linkPolicy, this.executor, this.onExpires));
+        this.onExpires = (Function<Collection<URI>, Summary>) Mockito.mock(Function.class);
+        this.factory = spy(new ComplexProcessorFactory(this.files, this.linkPolicy, this.executor, this.onExpires));
     }
 
     @AfterEach
     void tearDown() {
         this.href = null;
         this.page = null;
-        this.destination = null;
+        this.fileProcessor = null;
+        this.files = null;
         this.linkPolicy = null;
         this.executor = null;
         this.onExpires = null;
@@ -133,11 +126,11 @@ class ComplexProcessorFactoryTest {
 
     private HREF href;
     private Page page;
-    private Destination destination;
-    private ZoneId zone;
+    private Processor<CompletableFuture<Summary>> fileProcessor;
+    private ProcessorFactory<CompletableFuture<Summary>> files;
     private LinkPolicy linkPolicy;
     private Executor executor;
-    private Consumer<Collection<URI>> onExpires;
+    private Function<Collection<URI>, Summary> onExpires;
     private ComplexProcessorFactory factory;
 
 }

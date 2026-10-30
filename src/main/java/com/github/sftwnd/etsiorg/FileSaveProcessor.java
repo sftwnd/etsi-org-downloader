@@ -87,14 +87,23 @@ public class FileSaveProcessor implements Processor<CompletableFuture<Summary>> 
     @NonNull
     @Override
     public CompletableFuture<Summary> process() {
-        return CompletableFuture.completedFuture(this.saveFile());
+        return CompletableFuture.completedFuture(this.apply(this::saveFile));
     }
 
     /**
-     * Save the file unless the local copy is up to date
-     * @return summary of the file: downloaded, up to date, failed, or empty if another task or process is saving it
+     * What {@link #process()} would do, without changes and requests: the size and time of the file come from the listing
+     * @return summary of the file: to download with its size, up to date or failed
      */
-    private @NonNull Summary saveFile() {
+    public @NonNull Summary plan() {
+        return this.apply(this::planFile);
+    }
+
+    /**
+     * Apply the action to the local path of the file. A failure is reported and is the failed summary of the file
+     * @param action action with the local path and the expected length of the file
+     * @return summary of the action
+     */
+    private @NonNull Summary apply(@NonNull FileAction action) {
         final Path filePath;
         try {
             filePath = this.getDestination().pathOf(this.getPage().getUri());
@@ -103,16 +112,7 @@ public class FileSaveProcessor implements Processor<CompletableFuture<Summary>> 
             return Summary.FAILED;
         }
         try {
-            Files.createDirectories(filePath.getParent());
-            long contentLength = this.getPage().contentLength();
-            if (isUpToDate(filePath, contentLength)) {
-                return Summary.UP_TO_DATE;
-            }
-            if (download(filePath, contentLength)) {
-                logger.info("File: '{}' has been saved", Printable.of(filePath));
-                return Summary.DOWNLOADED;
-            }
-            return Summary.EMPTY;
+            return action.apply(filePath, this.getPage().contentLength());
         } catch (IOException ioex) {
             logger.error("Unable to save file: '{}'. Cause: {} {}", Printable.of(filePath), ioex.getClass().getSimpleName(), Printable.of(ioex.getMessage()));
             return Summary.FAILED;
@@ -120,8 +120,53 @@ public class FileSaveProcessor implements Processor<CompletableFuture<Summary>> 
     }
 
     /**
-     * Check the local copy of the file: it is up to date if it has the size and the time from the listing.
-     * A time that differs by a shift of the time zone is reset to the listing time
+     * Save the file unless the local copy is up to date
+     * @param filePath local path of the file
+     * @param contentLength expected length of the file
+     * @return summary of the file: downloaded, up to date, or empty if another task or process is saving it
+     * @throws IOException in the case of error
+     */
+    private @NonNull Summary saveFile(@NonNull Path filePath, long contentLength) throws IOException {
+        Files.createDirectories(filePath.getParent());
+        if (isUpToDate(filePath, contentLength)) {
+            syncFileTime(filePath, true);
+            return Summary.UP_TO_DATE;
+        }
+        if (download(filePath, contentLength)) {
+            logger.info("File: '{}' has been saved", Printable.of(filePath));
+            return Summary.downloaded(contentLength);
+        }
+        return Summary.EMPTY;
+    }
+
+    /**
+     * Check what saving the file would do
+     * @param filePath local path of the file
+     * @param contentLength expected length of the file
+     * @return summary of the file: to download with its size or up to date
+     * @throws IOException if the path is occupied by something else than a regular file
+     */
+    private @NonNull Summary planFile(@NonNull Path filePath, long contentLength) throws IOException {
+        if (isUpToDate(filePath, contentLength)) {
+            return Summary.UP_TO_DATE;
+        }
+        logger.info("File: '{}' is to be downloaded: {} bytes", Printable.of(filePath), contentLength);
+        return Summary.downloaded(contentLength);
+    }
+
+    /**
+     * Action with the local copy of the file
+     */
+    @FunctionalInterface
+    private interface FileAction {
+
+        @NonNull Summary apply(@NonNull Path filePath, long contentLength) throws IOException;
+
+    }
+
+    /**
+     * Check the local copy of the file without changing it: it is up to date if it has the size and the time
+     * from the listing; a time that differs by a shift of the time zone is up to date as well
      * @param filePath local path of the file
      * @param contentLength expected length of the file
      * @return true if the local copy is up to date, false if it is missing or has to be downloaded again
@@ -149,7 +194,6 @@ public class FileSaveProcessor implements Processor<CompletableFuture<Summary>> 
             }
         }
         logger.debug("File: '{}' already exists.", Printable.of(filePath));
-        syncFileTime(filePath, true);
         return true;
     }
 
@@ -182,7 +226,9 @@ public class FileSaveProcessor implements Processor<CompletableFuture<Summary>> 
                 return false;
             }
             upToDate = isUpToDate(filePath, contentLength);
-            if (!upToDate) {
+            if (upToDate) {
+                syncFileTime(filePath, true);
+            } else {
                 removeStaleParts(filePath, partPath);
                 transfer(channel, filePath, contentLength);
             }

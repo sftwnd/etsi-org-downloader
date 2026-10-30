@@ -4,9 +4,13 @@ import edu.umd.cs.findbugs.annotations.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.UnaryOperator;
@@ -74,6 +78,10 @@ public class Main {
             logger.error("Invalid configuration: {}", Printable.of(exception.getMessage()));
             return INVALID_CONFIGURATION;
         }
+        if (settings.isDryRun()) {
+            // nothing is written, so neither the write access nor the exclusion of other runs is needed
+            return mirror(settings, linkPolicy, destination);
+        }
         Optional<RunLock> lock;
         try {
             destination.prepare();
@@ -94,24 +102,36 @@ public class Main {
     }
 
     /**
-     * Mirror the site folder
+     * Mirror the site folder, or only plan it in a dry run
      * @param settings settings of the run
      * @param linkPolicy policy of the links inside the site folder
-     * @param destination prepared destination folder
+     * @param destination destination folder, prepared unless it is a dry run
      * @return exit status: {@link #SUCCESS} or {@link #FAILURE}
      */
     private static int mirror(@NonNull Settings settings, @NonNull LinkPolicy linkPolicy, @NonNull Destination destination) {
+        boolean dryRun = settings.isDryRun();
         ExecutorService executor = Executors.newFixedThreadPool(settings.getThreads());
         try {
-            logger.info("Mirroring '{}' to '{}' with {} threads, listing time zone: {}",
+            logger.info("{} '{}' to '{}' with {} threads, listing time zone: {}", dryRun ? "Dry run: planning the mirror of" : "Mirroring",
                     Printable.of(linkPolicy.getRoot()), Printable.of(destination.getRoot()), settings.getThreads(), settings.getZone());
-            var processorFactory = new ComplexProcessorFactory(destination, settings.getZone(), linkPolicy, executor, new ExpiredRemover(destination));
+            ExpiredRemover remover = new ExpiredRemover(destination);
+            ProcessorFactory<CompletableFuture<Summary>> files = dryRun
+                    ? page -> () -> CompletableFuture.completedFuture(new FileSaveProcessor(destination, settings.getZone(), page).plan())
+                    : page -> new FileSaveProcessor(destination, settings.getZone(), page);
+            var processorFactory = new ComplexProcessorFactory(files, linkPolicy, executor, dryRun ? remover::plan : remover);
             linkPolicy.visit(linkPolicy.getRoot());
             Summary summary = processorFactory
                     .processor(Page.of(HREF.builder().uri(linkPolicy.getRoot()).build()))
                     .process()
                     .join();
-            logger.info("Files downloaded: {}, up to date: {}, failed: {}", summary.getDownloaded(), summary.getUpToDate(), summary.getFailed());
+            if (dryRun) {
+                logger.info("Files to download: {} ({}), up to date: {}, expired versions to remove: {}, failed: {}",
+                        summary.getDownloaded(), size(summary.getBytes()), summary.getUpToDate(), summary.getRemoved(), summary.getFailed());
+                reportFreeSpace(destination, summary.getBytes());
+            } else {
+                logger.info("Files downloaded: {} ({}), up to date: {}, expired versions removed: {}, failed: {}",
+                        summary.getDownloaded(), size(summary.getBytes()), summary.getUpToDate(), summary.getRemoved(), summary.getFailed());
+            }
             return summary.getFailed() == 0 ? SUCCESS : FAILURE;
         } catch (RuntimeException rex) {
             logger.error("Mirroring has failed. Cause: {} {}", rex.getClass().getSimpleName(), Printable.of(rex.getMessage()));
@@ -119,6 +139,41 @@ public class Main {
         } finally {
             executor.shutdown();
         }
+    }
+
+    /**
+     * Report the usable space of the file system of the destination folder, or of its nearest existing parent folder,
+     * and whether the files to download fit into it
+     * @param destination destination folder
+     * @param bytes size of the files to download
+     */
+    private static void reportFreeSpace(@NonNull Destination destination, long bytes) {
+        Path folder = destination.getRoot();
+        while (folder.getParent() != null && Files.notExists(folder)) {
+            folder = folder.getParent();
+        }
+        try {
+            long usable = Files.getFileStore(folder).getUsableSpace();
+            logger.info("Free space for '{}': {}", Printable.of(destination.getRoot()), size(usable));
+            if (usable < bytes) {
+                logger.warn("Free space is {} less than the size of the files to download", size(bytes - usable));
+            }
+        } catch (IOException ioex) {
+            logger.warn("Unable to get the free space of '{}'. Cause: {} {}", Printable.of(folder), ioex.getClass().getSimpleName(), Printable.of(ioex.getMessage()));
+        }
+    }
+
+    /**
+     * Size in bytes or in binary units
+     * @param bytes number of the bytes
+     * @return size with one decimal place, e.g. {@code 1.5 GiB}, or the number of the bytes below a kibibyte
+     */
+    static @NonNull String size(long bytes) {
+        if (bytes < 1024) {
+            return bytes + " B";
+        }
+        int unit = (Long.SIZE - 1 - Long.numberOfLeadingZeros(bytes)) / 10;
+        return String.format(Locale.ROOT, "%.1f %ciB", bytes / (double) (1L << unit * 10), "KMGTPE".charAt(unit - 1));
     }
 
     /**
