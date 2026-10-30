@@ -92,6 +92,11 @@ class TextHtmlProcessorTest extends AbstractFileSourceTest {
         processFileTest("hostile");
     }
 
+    @Test
+    void processUnpaddedVersionsHtmlTest() throws IOException {
+        processFileTest("versions-unpadded");
+    }
+
     void processFileTest(@NonNull String name) throws IOException {
         startUp(name);
         var completableFuture = assertDoesNotThrow(() -> this.textHtmlProcessor(this.page).process());
@@ -234,6 +239,20 @@ class TextHtmlProcessorTest extends AbstractFileSourceTest {
 
     private static final Collection<Path> HOSTILE_EXCLUDES = List.of(Path.of("/deliver/etsi_ts/129000_129099/129011/16.00.00_60"));
 
+    /*  versions-unpadded: the actual version is chosen by number, only strictly older versions expire once
+
+        + /deliver/etsi_ts/129000_129099/129011/10.00.00_60
+
+        - /deliver/etsi_ts/129000_129099/129011/9.00.00_60
+        - /deliver/etsi_ts/129000_129099/129011/8.05.00_60
+    */
+
+    private static final Collection<Path> UNPADDED_VERSIONS_PATHS = List.of(Path.of("/deliver/etsi_ts/129000_129099/129011/10.00.00_60"));
+
+    private static final Collection<Path> UNPADDED_VERSIONS_EXCLUDES = Stream.of("9.00.00_60", "8.05.00_60")
+            .map(fileName -> Path.of("/deliver/etsi_ts/129000_129099/129011", fileName))
+            .collect(Collectors.toList());
+
     private static final LinkPolicy LINK_POLICY = new LinkPolicy(URI.create("http://localhost/deliver/"));
 
     private static final Map<String, Collection<Path>> RESULTS_MAP = Map.of(
@@ -242,6 +261,8 @@ class TextHtmlProcessorTest extends AbstractFileSourceTest {
             "versions-paths", VERSIONS_PATHS,
             "versions-excludes", VERSION_EXCLUDES,
             "hostile-paths", HOSTILE_PATHS,
-            "hostile-excludes", HOSTILE_EXCLUDES);
+            "hostile-excludes", HOSTILE_EXCLUDES,
+            "versions-unpadded-paths", UNPADDED_VERSIONS_PATHS,
+            "versions-unpadded-excludes", UNPADDED_VERSIONS_EXCLUDES);
 
 }

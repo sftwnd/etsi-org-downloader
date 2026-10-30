@@ -15,6 +15,7 @@ import java.util.Arrays;
 import java.util.Random;
 import java.util.stream.IntStream;
 import java.util.stream.LongStream;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -64,6 +65,23 @@ class HREFTest {
     @Test
     void versionNameTest() {
         assertEquals(DEFAULT_VERSIONED_NAME, HREF.versionName(DEFAULT_VERSION));
+    }
+
+    @Test
+    void numericVersionOrderTest() {
+        assertTrue(HREF.versionOfFile("10.00.00_60") > HREF.versionOfFile("9.00.00_60"));
+        assertTrue(HREF.versionOfFile("9.00.00_60") > HREF.versionOfFile("8.05.00_60"));
+    }
+
+    @Test
+    void largestVersionTest() {
+        assertEquals("999.999.999_999", HREF.versionName(HREF.versionOfFile("999.999.999_999")));
+    }
+
+    @Test
+    void notVersionedNameTest() {
+        Stream.of("1000.00.00_60", "99999999999999999999.00.00_60", "17.00.00", "17.00.00_60a", "v17.00.00_60")
+                .forEach(name -> assertEquals(0L, HREF.versionOfFile(name), name));
     }
 
     @Test

@@ -183,7 +183,7 @@ public class TextHtmlProcessor implements Processor<CompletableFuture<Stream<Pat
         }
         versionedHrefs
                 .stream()
-                .max(Comparator.comparing(href -> href.name().toString()))
+                .max(Comparator.comparingLong(HREF::getVersion))
                 .ifPresent(
                         actualRef -> {
                             hrefs.add(actualRef);
@@ -191,8 +191,9 @@ public class TextHtmlProcessor implements Processor<CompletableFuture<Stream<Pat
                             if (this.getOnExpires() != null) {
                                 Optional.of(versionedHrefs
                                                 .stream()
-                                                .filter(Predicate.not(href -> href == actualRef))
+                                                .filter(href -> href.getVersion() < actualRef.getVersion())
                                                 .map(HREF::getUri)
+                                                .distinct()
                                                 .collect(Collectors.toList()))
                                         .filter(Predicate.not(Collection::isEmpty))
                                         .ifPresent(this.getOnExpires());

@@ -115,9 +115,9 @@ public class HREF {
     }
 
     /**
-     * Pattern of file/resource description on site text/html page
+     * Pattern of the versioned resource name: every component fits into 12 bits of the version
      */
-    private static final Pattern VERSION_PATTERN = Pattern.compile("(\\d+)\\.(\\d+)\\.(\\d+)_(\\d+)");
+    private static final Pattern VERSION_PATTERN = Pattern.compile("(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})_(\\d{1,3})");
 
     /**
      * Version from uri of versioned resource
