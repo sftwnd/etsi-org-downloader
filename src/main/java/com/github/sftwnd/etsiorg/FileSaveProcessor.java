@@ -92,7 +92,7 @@ public class FileSaveProcessor implements Processor<CompletableFuture<Summary>> 
 
     /**
      * Save the file unless the local copy is up to date
-     * @return summary of the file: downloaded, up to date or empty if it has not been saved
+     * @return summary of the file: downloaded, up to date, failed, or empty if another task or process is saving it
      */
     private @NonNull Summary saveFile() {
         final Path filePath;
@@ -100,7 +100,7 @@ public class FileSaveProcessor implements Processor<CompletableFuture<Summary>> 
             filePath = this.getDestination().pathOf(this.getPage().getUri());
         } catch (IllegalArgumentException iaex) {
             logger.error("Unable to save file. {}", iaex.getMessage());
-            return Summary.EMPTY;
+            return Summary.FAILED;
         }
         try {
             Files.createDirectories(filePath.getParent());
@@ -115,7 +115,7 @@ public class FileSaveProcessor implements Processor<CompletableFuture<Summary>> 
             return Summary.EMPTY;
         } catch (IOException ioex) {
             logger.error("Unable to save file: '{}'. Cause: {} {}", Printable.of(filePath), ioex.getClass().getSimpleName(), Printable.of(ioex.getMessage()));
-            return Summary.EMPTY;
+            return Summary.FAILED;
         }
     }
 

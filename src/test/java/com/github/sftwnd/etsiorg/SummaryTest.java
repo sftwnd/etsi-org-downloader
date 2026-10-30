@@ -33,6 +33,15 @@ class SummaryTest {
     }
 
     @Test
+    void failedTest() {
+        assertEquals(1L, Summary.FAILED.getFailed());
+        assertEquals(Summary.EMPTY, Summary.failed(0));
+        assertEquals(3L, Summary.failed(3).getFailed());
+        assertEquals(4L, Summary.failed(3).plus(Summary.FAILED).plus(Summary.DOWNLOADED).getFailed());
+        assertThrows(IllegalArgumentException.class, () -> Summary.failed(-1));
+    }
+
+    @Test
     void plusNullTest() {
         assertThrows(NullPointerException.class, () -> Summary.EMPTY.plus(null));
     }

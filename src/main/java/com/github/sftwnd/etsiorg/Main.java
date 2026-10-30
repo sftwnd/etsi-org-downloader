@@ -33,7 +33,30 @@ public class Main {
     private static final String THREADS_PROPERTY = "threads";
     private static final String ZONE_PROPERTY = "zone";
 
+    /**
+     * Exit status of a run without failures
+     */
+    static final int SUCCESS = 0;
+
+    /**
+     * Exit status of a run in which some resources have failed
+     */
+    static final int FAILURE = 1;
+
+    /**
+     * Exit status of a run with an invalid configuration
+     */
+    static final int INVALID_CONFIGURATION = 2;
+
     public static void main(String[] args) {
+        System.exit(run());
+    }
+
+    /**
+     * Mirror the site folder with the configuration from the system properties
+     * @return exit status: {@link #SUCCESS}, {@link #FAILURE} or {@link #INVALID_CONFIGURATION}
+     */
+    static int run() {
         LinkPolicy linkPolicy;
         int threads;
         ZoneId zone;
@@ -45,7 +68,7 @@ public class Main {
             zone = zone(System.getProperty(ZONE_PROPERTY));
         } catch (URISyntaxException | IllegalArgumentException exception) {
             logger.error("Invalid configuration: {}", Printable.of(exception.getMessage()));
-            return;
+            return INVALID_CONFIGURATION;
         }
         ExecutorService executor = Executors.newFixedThreadPool(threads);
         try {
@@ -62,7 +85,11 @@ public class Main {
                     .processor(Page.of(HREF.builder().uri(linkPolicy.getRoot()).build()))
                     .process()
                     .join();
-            logger.info("Files downloaded: {}, up to date: {}", summary.getDownloaded(), summary.getUpToDate());
+            logger.info("Files downloaded: {}, up to date: {}, failed: {}", summary.getDownloaded(), summary.getUpToDate(), summary.getFailed());
+            return summary.getFailed() == 0 ? SUCCESS : FAILURE;
+        } catch (RuntimeException rex) {
+            logger.error("Mirroring has failed. Cause: {} {}", rex.getClass().getSimpleName(), Printable.of(rex.getMessage()));
+            return FAILURE;
         } finally {
             executor.shutdown();
         }
