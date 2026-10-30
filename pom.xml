@@ -46,7 +46,8 @@
     <dependencies>
         <dependency>
             <groupId>com.github.spotbugs</groupId>
-            <artifactId>spotbugs</artifactId>
+            <artifactId>spotbugs-annotations</artifactId>
+            <scope>provided</scope>
             <optional>true</optional>
         </dependency>
         <dependency>
@@ -205,7 +206,7 @@
             </dependency>
             <dependency>
                 <groupId>com.github.spotbugs</groupId>
-                <artifactId>spotbugs</artifactId>
+                <artifactId>spotbugs-annotations</artifactId>
                 <version>${spotbugs-annotations.version}</version>
             </dependency>
             <dependency>
