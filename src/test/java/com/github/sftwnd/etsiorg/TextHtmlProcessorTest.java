@@ -34,7 +34,7 @@ class TextHtmlProcessorTest extends AbstractFileSourceTest {
     void textHtmlProcessorNullPageTest() {
         assertThrows(
                 NullPointerException.class,
-                () -> new TextHtmlProcessor(this.<Page>nullRef().get(), mock(ProcessorFactory.class), mock(Executor.class), mock(Consumer.class))
+                () -> new TextHtmlProcessor(this.<Page>nullRef().get(), mock(ProcessorFactory.class), LINK_POLICY, mock(Executor.class), mock(Consumer.class))
         );
     }
 
@@ -46,6 +46,20 @@ class TextHtmlProcessorTest extends AbstractFileSourceTest {
                 () -> new TextHtmlProcessor(
                         mock(Page.class),
                         this.<ProcessorFactory<CompletableFuture<Stream<Path>>>>nullRef().get(),
+                        LINK_POLICY,
+                        mock(Executor.class),
+                        mock(Consumer.class)));
+    }
+
+    @Test
+    @SuppressWarnings({"unchecked"})
+    void textHtmlProcessorLinkPolicyNull() {
+        assertThrows(
+                NullPointerException.class,
+                () -> new TextHtmlProcessor(
+                        mock(Page.class),
+                        mock(ProcessorFactory.class),
+                        this.<LinkPolicy>nullRef().get(),
                         mock(Executor.class),
                         mock(Consumer.class)));
     }
@@ -54,7 +68,7 @@ class TextHtmlProcessorTest extends AbstractFileSourceTest {
     @SuppressWarnings("unchecked")
     void textHtmlProcessorTest() {
         assertDoesNotThrow(
-                () -> new TextHtmlProcessor(mock(Page.class), mock(ProcessorFactory.class), null, null)
+                () -> new TextHtmlProcessor(mock(Page.class), mock(ProcessorFactory.class), LINK_POLICY, null, null)
         );
     }
 
@@ -71,6 +85,11 @@ class TextHtmlProcessorTest extends AbstractFileSourceTest {
     @Test
     void processNonVersionHtmlTest() throws IOException {
         processFileTest("non-version");
+    }
+
+    @Test
+    void processHostileHtmlTest() throws IOException {
+        processFileTest("hostile");
     }
 
     void processFileTest(@NonNull String name) throws IOException {
@@ -102,7 +121,7 @@ class TextHtmlProcessorTest extends AbstractFileSourceTest {
     }
 
     private @NonNull TextHtmlProcessor textHtmlProcessor(@NonNull Page page) {
-        return new TextHtmlProcessor(page, this.processorFactory, null, this.onExpires);
+        return new TextHtmlProcessor(page, this.processorFactory, new LinkPolicy(URI.create("http://localhost/deliver/")), null, this.onExpires);
     }
 
     @AfterEach
@@ -201,10 +220,28 @@ class TextHtmlProcessorTest extends AbstractFileSourceTest {
             .map(fileName -> Path.of("/deliver/etsi_ts/129000_129099/129011", fileName))
             .collect(Collectors.toList());
 
+    /*  hostile: links outside the mirrored folder are skipped, a duplicate is processed once
+
+        + /deliver/etsi_ts/129000_129099/129011/ts_129011v170000p.pdf
+        + /deliver/etsi_ts/129000_129099/129011/17.00.00_60
+
+        - /deliver/etsi_ts/129000_129099/129011/16.00.00_60
+    */
+
+    private static final Collection<Path> HOSTILE_PATHS = List.of(
+            Path.of("/deliver/etsi_ts/129000_129099/129011/ts_129011v170000p.pdf"),
+            Path.of("/deliver/etsi_ts/129000_129099/129011/17.00.00_60"));
+
+    private static final Collection<Path> HOSTILE_EXCLUDES = List.of(Path.of("/deliver/etsi_ts/129000_129099/129011/16.00.00_60"));
+
+    private static final LinkPolicy LINK_POLICY = new LinkPolicy(URI.create("http://localhost/deliver/"));
+
     private static final Map<String, Collection<Path>> RESULTS_MAP = Map.of(
             "files-paths", FILES_PATHS,
             "non-version-paths", NON_VERSION_PATHS,
             "versions-paths", VERSIONS_PATHS,
-            "versions-excludes", VERSION_EXCLUDES);
+            "versions-excludes", VERSION_EXCLUDES,
+            "hostile-paths", HOSTILE_PATHS,
+            "hostile-excludes", HOSTILE_EXCLUDES);
 
 }

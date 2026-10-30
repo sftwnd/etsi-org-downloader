@@ -34,20 +34,27 @@ public class Main {
     private static final String URI_PROPERTY = "uri";
     private static final String DEST_PROPERTY = "dest";
 
-    public static void main(String[] args) throws URISyntaxException {
+    public static void main(String[] args) {
+        LinkPolicy linkPolicy;
+        try {
+            linkPolicy = new LinkPolicy(new URI(Optional.ofNullable(System.getProperty(URI_PROPERTY))
+                    .filter(Predicate.not(String::isBlank))
+                    .orElse(DEFAULT_URI)));
+        } catch (URISyntaxException | IllegalArgumentException exception) {
+            logger.error("Invalid start uri: {}", Printable.of(exception.getMessage()));
+            return;
+        }
         ExecutorService executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
         try {
             Path dest = Optional.ofNullable(System.getProperty(DEST_PROPERTY))
                     .filter(Predicate.not(String::isBlank))
                     .map(Path::of)
                     .orElseGet(() -> Path.of("."));
-            URI uri = new URI(Optional.ofNullable(System.getProperty(URI_PROPERTY))
-                    .filter(Predicate.not(String::isBlank))
-                    .orElse(DEFAULT_URI));
             Destination destination = new Destination(dest);
-            var processorFactory = new ComplexProcessorFactory(destination, executor, getOnExpires(destination));
+            var processorFactory = new ComplexProcessorFactory(destination, linkPolicy, executor, getOnExpires(destination));
+            linkPolicy.visit(linkPolicy.getRoot());
             processorFactory
-                    .processor(Page.of(HREF.builder().uri(uri).build()))
+                    .processor(Page.of(HREF.builder().uri(linkPolicy.getRoot()).build()))
                     .process()
                     .thenApply(Stream::sorted)
                     .thenApply(stream -> stream.map(Path::toString))

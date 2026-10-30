@@ -37,6 +37,7 @@ public class TextHtmlProcessor implements Processor<CompletableFuture<Stream<Pat
 
     private final Page page;
     private final ProcessorFactory<CompletableFuture<Stream<Path>>> processorFactory;
+    private final LinkPolicy linkPolicy;
     private final Executor executor;
     private final Consumer<Collection<URI>> onExpires;
 
@@ -44,15 +45,18 @@ public class TextHtmlProcessor implements Processor<CompletableFuture<Stream<Pat
      * Constructor of Text Html Processor
      * @param page text/html reference
      * @param processorFactory factory for processor resource
+     * @param linkPolicy policy of the links to follow
      * @param executor executor for the async execution
      * @param onExpires listener for the expired resources
      */
     TextHtmlProcessor(@NonNull Page page,
                       @NonNull ProcessorFactory<CompletableFuture<Stream<Path>>> processorFactory,
+                      @NonNull LinkPolicy linkPolicy,
                       @Nullable Executor executor,
                       @Nullable Consumer<Collection<URI>> onExpires) {
         this.page = Objects.requireNonNull(page, "TextHtmlProcessor::new - page is null");
         this.processorFactory = Objects.requireNonNull(processorFactory, "TextHtmlProcessor::new - processorFactory is null");
+        this.linkPolicy = Objects.requireNonNull(linkPolicy, "TextHtmlProcessor::new - linkPolicy is null");
         this.executor = executor;
         this.onExpires = onExpires;
     }
@@ -153,8 +157,13 @@ public class TextHtmlProcessor implements Processor<CompletableFuture<Stream<Pat
         Collection<HREF> hrefs = new LinkedList<>();
         Collection<HREF> versionedHrefs = new LinkedList<>();
         while (matcher.find()) {
+            URI uri = page.getUri().resolve("/").resolve(matcher.group(9));
+            if (!this.getLinkPolicy().accepts(uri)) {
+                logger.warn("Link is outside of the mirrored folder and is skipped: '{}'", Printable.of(uri));
+                continue;
+            }
             HREF href = HREF.builder()
-                    .uri(page.getUri().resolve("/").resolve(matcher.group(9)))
+                    .uri(uri)
                     .bytes(Optional.ofNullable(matcher.group(7))
                             .filter(Predicate.not(String::isBlank))
                             .map(Long::parseLong).orElse(null))
@@ -189,7 +198,20 @@ public class TextHtmlProcessor implements Processor<CompletableFuture<Stream<Pat
                                         .ifPresent(this.getOnExpires());
                             }
                         });
-        return hrefs.stream();
+        return hrefs.stream().filter(this::firstVisit);
+    }
+
+    /**
+     * Register the visit of the resource
+     * @param href resource reference
+     * @return true if the resource has not been visited yet
+     */
+    private boolean firstVisit(@NonNull HREF href) {
+        boolean first = this.getLinkPolicy().visit(href.getUri());
+        if (!first) {
+            logger.debug("Resource has already been processed: '{}'", Printable.of(href.path()));
+        }
+        return first;
     }
 
     /**

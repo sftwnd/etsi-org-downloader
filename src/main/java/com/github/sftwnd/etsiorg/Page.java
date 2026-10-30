@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
+import java.net.URLConnection;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -148,7 +149,11 @@ public class Page {
             this.inputStream = null;
         }
         if (this.connection == null) {
-            this.connection = (HttpURLConnection) href.getUri().toURL().openConnection();
+            URLConnection urlConnection = href.getUri().toURL().openConnection();
+            if (!(urlConnection instanceof HttpURLConnection)) {
+                throw new IOException("Resource is not available over HTTP: " + Printable.of(href.getUri()));
+            }
+            this.connection = (HttpURLConnection) urlConnection;
             connection.setRequestMethod("GET");
             connection.setRequestProperty("User-Agent", USER_AGENT);
             if (offset > 0L) {
