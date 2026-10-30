@@ -28,8 +28,8 @@
     </scm>
 
     <properties>
-        <maven.compiler.source>11</maven.compiler.source>
-        <maven.compiler.target>11</maven.compiler.target>
+        <!-- the Java 11 API on any JDK: javac checks the code against Java 11, not against the JDK it runs on -->
+        <maven.compiler.release>11</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <javaModuleName>com.github.sftwnd.etsiorg</javaModuleName>
         <!-- the tests are patched into the module and use what the module does not require: the HTTP server of the JDK
