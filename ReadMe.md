@@ -142,8 +142,11 @@ docker compose run --rm etsiorg --help
 To remove the image:
 
 ```console
-docker rmi sftwnd/etsi-org:1.0
+docker rmi sftwnd/etsiorg-downloader
 ```
+
+The image `sftwnd/etsiorg-downloader` is built from the sources at hand, so it has no version tag: the downloader logs
+its version at the start and prints it with `--help`.
 
 ## Architecture
 

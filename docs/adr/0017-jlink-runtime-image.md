@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-10-30
+- Amended: 2026-10-30 — the name of the image, its labels and the version of the downloader (#69)
 - Russian version: [ADR-0017](ru/0017-jlink-runtime-image.md)
 
 ## Context
@@ -27,6 +28,10 @@ and links the C++ library statically (checked with `ldd`). The listings are UTF-
   as its user `nonroot` (UID 65532) and starts the module: `/opt/etsiorg/bin/java … -m com.github.sftwnd.etsiorg`.
 - The continuous integration ([ADR-0012](0012-continuous-integration.md)) checks that the runtime of the built image
   has the modules bound as services.
+- The image is `sftwnd/etsiorg-downloader` without a version tag, with the OCI labels `title`, `description`,
+  `source`, `url`, `licenses` and `base.name`. The version is not a label: the downloader reports it — a run logs
+  `etsiorg-downloader <version>, Java <version>` at the start, and `--help` prints it — from the descriptor of its
+  module on the module path and from `Implementation-Version` of the manifest of its jar on the class path.
 
 ## Rationale
 
@@ -37,6 +42,9 @@ and links the C++ library statically (checked with `ldd`). The listings are UTF-
   the class path of the fat jar does not.
 - distroless is a maintained minimal base with glibc; an image based on musl, like Alpine, would need another build
   of the JDK.
+- The version is set in `pom.xml` only: a Dockerfile cannot read it, so a tag or a label with the version would be
+  a second copy, like the one removed from `run.sh` (#73). The version of the module is the version of the code that
+  actually runs, whatever the image is called.
 
 ## Consequences
 

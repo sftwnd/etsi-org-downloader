@@ -172,9 +172,15 @@ class MainTest {
     }
 
     @Test
+    void versionTest() {
+        assertEquals(System.getProperty("etsiorg.version"), Main.version());
+    }
+
+    @Test
     void helpTextTest() {
         String help = Main.help();
         assertTrue(help.startsWith("Usage: etsiorg-downloader [-h | --help]"), help);
+        assertTrue(help.contains("etsiorg-downloader " + System.getProperty("etsiorg.version") + " mirrors"), help);
         assertTrue(help.contains(Settings.help()), help);
         assertTrue(help.contains("0 - no failures, 1 - some resources have failed, 2 - invalid configuration, "
                 + "3 - out of memory, 4 - another run mirrors to the destination folder"), help);

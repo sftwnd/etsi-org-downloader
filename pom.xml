@@ -143,6 +143,9 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
                     <argLine>--add-reads ${test.run.addReads}</argLine>
+                    <systemPropertyVariables>
+                        <etsiorg.version>${project.version}</etsiorg.version>
+                    </systemPropertyVariables>
                 </configuration>
             </plugin>
 
@@ -157,6 +160,8 @@
                         <manifest>
                             <!-- the jar of a module: the main class is set in the module descriptor as well -->
                             <mainClass>com.github.sftwnd.etsiorg.Main</mainClass>
+                            <!-- Implementation-Version: the version of the downloader on the class path -->
+                            <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
                         </manifest>
                     </archive>
                 </configuration>
@@ -212,6 +217,8 @@
                     <archive>
                         <manifest>
                             <mainClass>com.github.sftwnd.etsiorg.Main</mainClass>
+                            <!-- Implementation-Version: the version of the downloader on the class path -->
+                            <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
                         </manifest>
                     </archive>
                 </configuration>
@@ -236,6 +243,7 @@
                         <etsiorg.modulePath>${project.build.directory}/lib</etsiorg.modulePath>
                         <etsiorg.fatJar>${project.build.directory}/${project.build.finalName}-jar-with-dependencies.jar</etsiorg.fatJar>
                         <etsiorg.logbackConfiguration>${project.basedir}/src/main/resources/logback.xml</etsiorg.logbackConfiguration>
+                        <etsiorg.version>${project.version}</etsiorg.version>
                     </systemPropertyVariables>
                 </configuration>
                 <executions>

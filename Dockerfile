@@ -23,6 +23,13 @@ RUN jlink --module-path "$(ls target/etsiorg-downloader-*.jar | grep -v -- -jar-
 
 # Runtime stage: the runtime on a minimal system with glibc and without a shell, run by its user nonroot (65532)
 FROM gcr.io/distroless/base-debian12
+# The version is not a label: it is set in pom.xml only, and the downloader reports the version of its module
+LABEL org.opencontainers.image.title="etsiorg-downloader" \
+      org.opencontainers.image.description="Mirrors the document tree of ETSI, www.etsi.org/deliver, to a local folder" \
+      org.opencontainers.image.source="https://github.com/sftwnd/etsi-org-downloader" \
+      org.opencontainers.image.url="https://github.com/sftwnd/etsi-org-downloader" \
+      org.opencontainers.image.licenses="BSD-3-Clause" \
+      org.opencontainers.image.base.name="gcr.io/distroless/base-debian12"
 COPY --from=build /runtime /opt/etsiorg
 COPY src/main/resources/logback.xml /opt/etsiorg/logback.xml
 COPY --from=build --chown=nonroot:nonroot /data /data

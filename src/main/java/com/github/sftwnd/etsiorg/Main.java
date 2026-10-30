@@ -4,6 +4,7 @@ import edu.umd.cs.findbugs.annotations.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
+import java.lang.module.ModuleDescriptor;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Locale;
@@ -118,6 +119,7 @@ public class Main {
         boolean dryRun = settings.isDryRun();
         ExecutorService executor = Executors.newFixedThreadPool(settings.getThreads());
         try {
+            logger.info("etsiorg-downloader {}, Java {}", version(), Runtime.version());
             logger.info("{} '{}' to '{}' with {} threads, listing time zone: {}", dryRun ? "Dry run: planning the mirror of" : "Mirroring",
                     Printable.of(linkPolicy.getRoot()), Printable.of(destination.getRoot()), settings.getThreads(), settings.getZone());
             ExpiredRemover remover = new ExpiredRemover(destination);
@@ -183,13 +185,24 @@ public class Main {
     }
 
     /**
+     * Version of the downloader: of its module on the module path, from the manifest of its jar on the class path
+     * @return version or {@code unknown} if neither has it
+     */
+    static @NonNull String version() {
+        return Optional.ofNullable(Main.class.getModule().getDescriptor())
+                .flatMap(ModuleDescriptor::rawVersion)
+                .or(() -> Optional.ofNullable(Main.class.getPackage().getImplementationVersion()))
+                .orElse("unknown");
+    }
+
+    /**
      * Help: the usage, the settings and the exit statuses
      * @return text of the help
      */
     static @NonNull String help() {
         String lineSeparator = System.lineSeparator();
         return "Usage: etsiorg-downloader [-h | --help]" + lineSeparator
-                + "Mirrors a folder of " + Settings.DEFAULT_URI + " to a local folder." + lineSeparator
+                + "etsiorg-downloader " + version() + " mirrors a folder of " + Settings.DEFAULT_URI + " to a local folder." + lineSeparator
                 + lineSeparator
                 + "Settings: a system property -D<name>=<value>, otherwise an environment variable, otherwise the default:" + lineSeparator
                 + Settings.help() + lineSeparator
