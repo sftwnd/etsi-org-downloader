@@ -43,9 +43,10 @@ of its distribution and runs it. Run it in the project folder: `.mvn/maven.confi
 ./run.sh [JVM options]
 ```
 
-The script builds the jar if it is missing and mirrors `https://www.etsi.org/deliver/` to `./deliver` of the current
-directory. It starts the jar with the JDK the Maven Wrapper builds it with: `$JAVA_HOME/bin/java`, or `java` from `PATH`
-if `JAVA_HOME` is not set. The options are passed to the JVM, e.g. another site folder and destination:
+The script builds the jar if it is missing or older than the files it is built from — `pom.xml`, `lombok.config`,
+`src/main` and `src/assembly` — and mirrors `https://www.etsi.org/deliver/` to `./deliver` of the current directory.
+It starts the jar with the JDK the Maven Wrapper builds it with: `$JAVA_HOME/bin/java`, or `java` from `PATH` if
+`JAVA_HOME` is not set. The options are passed to the JVM, e.g. another site folder and destination:
 
 ```console
 ./run.sh -Duri=https://www.etsi.org/deliver/etsi_ts/ -Ddest=/data/etsi
