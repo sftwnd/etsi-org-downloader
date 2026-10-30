@@ -22,11 +22,16 @@ import java.util.stream.Stream;
 public class ComplexProcessorFactory implements ProcessorFactory<CompletableFuture<Stream<Path>>> {
 
     private final Destination destination;
+    private final LinkPolicy linkPolicy;
     private final Executor executor;
     private final Consumer<Collection<URI>> onExpires;
 
-    public ComplexProcessorFactory(@NonNull Destination destination, @Nullable Executor executor, @Nullable Consumer<Collection<URI>> onExpires) {
+    public ComplexProcessorFactory(@NonNull Destination destination,
+                                   @NonNull LinkPolicy linkPolicy,
+                                   @Nullable Executor executor,
+                                   @Nullable Consumer<Collection<URI>> onExpires) {
         this.destination = Objects.requireNonNull(destination, "ComplexProcessorFactory::new - destination is null");
+        this.linkPolicy = Objects.requireNonNull(linkPolicy, "ComplexProcessorFactory::new - linkPolicy is null");
         this.executor = executor;
         this.onExpires = onExpires;
     }
@@ -46,7 +51,7 @@ public class ComplexProcessorFactory implements ProcessorFactory<CompletableFutu
      * @return Processor to load text/html, parse and initialize child files loading
      */
     private Processor<CompletableFuture<Stream<Path>>> textHtmlProcessor(@NonNull Page page) {
-        return new TextHtmlProcessor(page, this, executor, onExpires);
+        return new TextHtmlProcessor(page, this, linkPolicy, executor, onExpires);
     }
 
     /**
