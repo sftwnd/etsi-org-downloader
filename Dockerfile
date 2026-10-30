@@ -12,21 +12,26 @@ COPY mvnw pom.xml lombok.config ./
 COPY .mvn ./.mvn
 COPY src ./src
 RUN --mount=type=cache,target=/root/.m2 ./mvnw -B -q package -Dmaven.test.skip=true
+# The Java runtime of the downloader: its module with the modules it requires, and the modules bound as services,
+# which jlink does not add by itself: logback, the provider of SLF4J, and jdk.crypto.ec, the elliptic curves of the TLS
+# of www.etsi.org. The empty /data is the mount point of the destination folder
+RUN jlink --module-path "$(ls target/etsiorg-downloader-*.jar | grep -v -- -jar-with-dependencies):target/lib" \
+          --add-modules com.github.sftwnd.etsiorg,ch.qos.logback.classic,jdk.crypto.ec \
+          --strip-debug --no-header-files --no-man-pages --compress=2 \
+          --output /runtime \
+ && mkdir /data
 
-# Runtime stage: Java runtime only, the mirror is written by a non-root user to the /data volume
-FROM eclipse-temurin:11-jre
-RUN groupadd --system --gid 10001 etsiorg \
- && useradd --system --uid 10001 --gid etsiorg --home-dir /opt/etsiorg --no-create-home --shell /usr/sbin/nologin etsiorg \
- && mkdir -p /data \
- && chown etsiorg:etsiorg /data
-WORKDIR /opt/etsiorg
+# Runtime stage: the runtime on a minimal system with glibc and without a shell, run by its user nonroot (65532)
+FROM gcr.io/distroless/base-debian12
+COPY --from=build /runtime /opt/etsiorg
+COPY src/main/resources/logback.xml /opt/etsiorg/logback.xml
+COPY --from=build --chown=nonroot:nonroot /data /data
 # The log of a container is read by docker logs and log collectors, not in a terminal: no colors (https://no-color.org).
 # The mirror is written to the /data volume
 ENV NO_COLOR=1 \
     ETSIORG_DEST=/data
-COPY --from=build /build/target/etsiorg-downloader-*-jar-with-dependencies.jar etsiorg-downloader.jar
-COPY src/main/resources/logback.xml logback.xml
-USER etsiorg
+USER nonroot
+WORKDIR /data
 # The heap is a share of the memory limit of the container, and an OutOfMemoryError ends the run with the status 3
-ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75", "-XX:+ExitOnOutOfMemoryError", \
-            "-Dlogback.configurationFile=/opt/etsiorg/logback.xml", "-jar", "/opt/etsiorg/etsiorg-downloader.jar"]
+ENTRYPOINT ["/opt/etsiorg/bin/java", "-XX:MaxRAMPercentage=75", "-XX:+ExitOnOutOfMemoryError", \
+            "-Dlogback.configurationFile=/opt/etsiorg/logback.xml", "-m", "com.github.sftwnd.etsiorg"]

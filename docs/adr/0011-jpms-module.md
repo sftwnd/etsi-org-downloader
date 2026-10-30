@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-10-30
+- Amended: 2026-10-30 — the image runs the module in a runtime built by jlink (#60)
 - Russian version: [ADR-0011](ru/0011-jpms-module.md)
 
 ## Context
@@ -20,7 +21,7 @@ module `ch.qos.logback.classic@1.5.38`.
 - The jar of the project is a modular jar: `maven-jar-plugin` sets the main class in the module descriptor, and
   `maven-dependency-plugin` copies the runtime modules to `target/lib`. Start:
   `java --module-path target/etsiorg-downloader-<version>.jar:target/lib --module com.github.sftwnd.etsiorg`.
-- The fat jar stays the jar for the class path (`run.sh`, Docker): an assembly descriptor of its own repeats
+- The fat jar stays the jar for the class path (`run.sh`): an assembly descriptor of its own repeats
   `jar-with-dependencies` without `module-info.class`.
 - The tests run on the module path, patched into the module; what they use beyond the descriptor is given to them only:
   `jdk.httpserver` and `java.xml` to the compiler, the reads of `jdk.httpserver` and of logback to Surefire.
@@ -42,7 +43,8 @@ module `ch.qos.logback.classic@1.5.38`.
 
 ## Consequences
 
-- There are two ways to start: the fat jar on the class path (`run.sh`, Docker) and the module on the module path.
+- There are two ways to start: the fat jar on the class path (`run.sh`) and the module on the module path; the image
+  runs the module in a runtime built by jlink ([ADR-0017](0017-jlink-runtime-image.md)).
 - A new dependency of the code needs a `requires` in `module-info.java`; a new dependency of the tests beyond the module
   may need an `--add-reads` or `--add-modules` in `pom.xml`.
 - `./mvnw verify` takes a few seconds more: it starts the downloader twice.
