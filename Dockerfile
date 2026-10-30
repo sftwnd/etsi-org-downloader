@@ -20,9 +20,11 @@ RUN groupadd --system --gid 10001 etsiorg \
  && mkdir -p /data \
  && chown etsiorg:etsiorg /data
 WORKDIR /opt/etsiorg
-# The log of a container is read by docker logs and log collectors, not in a terminal: no colors (https://no-color.org)
-ENV NO_COLOR=1
+# The log of a container is read by docker logs and log collectors, not in a terminal: no colors (https://no-color.org).
+# The mirror is written to the /data volume
+ENV NO_COLOR=1 \
+    ETSIORG_DEST=/data
 COPY --from=build /build/target/etsiorg-downloader-*-jar-with-dependencies.jar etsiorg-downloader.jar
 COPY src/main/resources/logback.xml logback.xml
 USER etsiorg
-ENTRYPOINT ["java", "-Dlogback.configurationFile=/opt/etsiorg/logback.xml", "-Ddest=/data", "-jar", "/opt/etsiorg/etsiorg-downloader.jar"]
+ENTRYPOINT ["java", "-Dlogback.configurationFile=/opt/etsiorg/logback.xml", "-jar", "/opt/etsiorg/etsiorg-downloader.jar"]

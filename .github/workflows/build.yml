@@ -50,5 +50,5 @@ jobs:
         # configuration of the image are checked without the network
         run: |
           status=0
-          docker compose run --rm --env JDK_JAVA_OPTIONS=-Duri=ftp://example.org/ etsiorg || status=$?
+          docker compose run --rm --env ETSIORG_URI=ftp://example.org/ etsiorg || status=$?
           test "${status}" -eq 2

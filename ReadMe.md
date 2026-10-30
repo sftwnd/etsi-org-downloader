@@ -43,24 +43,28 @@ of its distribution and runs it. Run it in the project folder: `.mvn/maven.confi
 ## Run
 
 ```console
-./run.sh [JVM options]
+./run.sh [JVM options] [--help]
 ```
 
 The script builds the jar if it is missing or older than the files it is built from — `pom.xml`, `lombok.config`,
 `src/main` and `src/assembly` — and mirrors `https://www.etsi.org/deliver/` to `./deliver` of the current directory.
 It starts the jar with the JDK the Maven Wrapper builds it with: `$JAVA_HOME/bin/java`, or `java` from `PATH` if
-`JAVA_HOME` is not set. The options are passed to the JVM, e.g. another site folder and destination:
+`JAVA_HOME` is not set. The options are passed to the JVM; `-h` or `--help` prints the settings.
+
+A setting is a system property or an environment variable; the property overrides the variable, and a blank value
+is not set. E.g. another site folder and destination:
 
 ```console
 ./run.sh -Duri=https://www.etsi.org/deliver/etsi_ts/ -Ddest=/data/etsi
+ETSIORG_URI=https://www.etsi.org/deliver/etsi_ts/ ETSIORG_DEST=/data/etsi ./run.sh
 ```
 
-| Property    | Default                         | Meaning                                                              |
-|-------------|---------------------------------|----------------------------------------------------------------------|
-| `-Duri`     | `https://www.etsi.org/deliver/` | Site folder to mirror; only links inside it are followed             |
-| `-Ddest`    | `.`                             | Destination folder; files are stored under their path on the site    |
-| `-Dthreads` | `4`                             | Threads that process listings and files, i.e. simultaneous requests  |
-| `-Dzone`    | `UTC`                           | Time zone of the listing time; www.etsi.org lists it in UTC          |
+| Property    | Environment variable | Default                         | Meaning                                                             |
+|-------------|----------------------|---------------------------------|---------------------------------------------------------------------|
+| `-Duri`     | `ETSIORG_URI`        | `https://www.etsi.org/deliver/` | Site folder to mirror; only links inside it are followed            |
+| `-Ddest`    | `ETSIORG_DEST`       | `.`                             | Destination folder; files are stored under their path on the site   |
+| `-Dthreads` | `ETSIORG_THREADS`    | `4`                             | Threads that process listings and files, i.e. simultaneous requests |
+| `-Dzone`    | `ETSIORG_ZONE`       | `UTC`                           | Time zone of the listing time; www.etsi.org lists it in UTC         |
 
 The log is colored for a terminal. As [no-color.org](https://no-color.org) suggests, `NO_COLOR` set to a non-empty value
 turns the colors off, e.g. for a log written to a file: `NO_COLOR=1 ./run.sh > mirror.log`.
@@ -87,7 +91,7 @@ A run can be interrupted at any moment: the next run resumes the unfinished down
 |--------|---------------------------------------------------------------------------------------------|
 | `0`    | no failures                                                                                 |
 | `1`    | some resources have failed; a repeated run does not download the already downloaded files   |
-| `2`    | invalid configuration                                                                       |
+| `2`    | invalid configuration: an invalid setting or an argument other than `-h` and `--help`       |
 
 ## Docker
 
@@ -100,14 +104,18 @@ the downloader as a non-root user (UID 10001) with a read-only file system. Only
 at `/data`: `./mirror` of the project folder, or the host folder `ETSIORG_MIRROR` names in the environment or in `.env`,
 e.g. `ETSIORG_MIRROR=/srv/etsi docker compose up`. The files are stored under their path on the site,
 `mirror/deliver/...`. On Linux create the folder and make it writable for the user before the first start,
-e.g. `mkdir -p mirror && sudo chown 10001 mirror`. The log of the container is not colored: the image sets
+e.g. `mkdir -p mirror && sudo chown 10001 mirror`. A mirror made by an earlier version in `./deliver` of the project
+folder is moved once: `mkdir -p mirror && mv deliver mirror/`. The log of the container is not colored: the image sets
 `NO_COLOR=1`. A run logs a line per file, so the log is rotated: at most five files of 10 MB (`logging`
 in `docker-compose.yml`), and `docker logs` shows what they hold.
 
-Properties are passed with `JDK_JAVA_OPTIONS`:
+The settings are environment variables: the image sets `ETSIORG_DEST=/data`, and `docker-compose.yml` passes
+`ETSIORG_URI`, `ETSIORG_THREADS` and `ETSIORG_ZONE` from the environment of docker compose or from `.env`:
 
 ```console
-docker compose run --rm -e JDK_JAVA_OPTIONS="-Duri=https://www.etsi.org/deliver/etsi_ts/ -Dthreads=2" etsiorg
+ETSIORG_URI=https://www.etsi.org/deliver/etsi_ts/ ETSIORG_THREADS=2 docker compose up
+docker compose run --rm -e ETSIORG_URI=https://www.etsi.org/deliver/etsi_ts/ etsiorg
+docker compose run --rm etsiorg --help
 ```
 
 To remove the image:

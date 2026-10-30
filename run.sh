@@ -1,5 +1,6 @@
 #!/bin/bash
-# Mirrors the ETSI documents tree. Arguments are passed to the JVM, e.g.: ./run.sh -Ddest=/data/etsi
+# Mirrors the ETSI documents tree. Arguments are options of the JVM, e.g. ./run.sh -Ddest=/data/etsi, except -h and --help,
+# which print the settings of the downloader; a setting may also be an environment variable: ETSIORG_DEST=/data/etsi ./run.sh
 set -euo pipefail
 ETSI_ORG_HOME="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOGBACK_FILE="${ETSI_ORG_HOME}/src/main/resources/logback.xml"
@@ -29,4 +30,14 @@ if [ -z "${ETSI_ORG_JAR}" ] || outdated "${ETSI_ORG_JAR}"; then
   (cd "${ETSI_ORG_HOME}" && ./mvnw -B clean package)
   ETSI_ORG_JAR="$(fat_jar)"
 fi
-exec "${JAVA_CMD}" -Dlogback.configurationFile="${LOGBACK_FILE}" "$@" -jar "${ETSI_ORG_JAR}"
+JVM_OPTIONS=()
+ARGUMENTS=()
+for argument in "$@"; do
+  case "${argument}" in
+    -h|--help) ARGUMENTS+=("${argument}") ;;
+    *) JVM_OPTIONS+=("${argument}") ;;
+  esac
+done
+# ${array[@]+...} expands an empty array under set -u in bash 3.2 of macOS as well
+exec "${JAVA_CMD}" -Dlogback.configurationFile="${LOGBACK_FILE}" ${JVM_OPTIONS[@]+"${JVM_OPTIONS[@]}"} \
+     -jar "${ETSI_ORG_JAR}" ${ARGUMENTS[@]+"${ARGUMENTS[@]}"}

@@ -12,6 +12,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -71,21 +72,50 @@ class ModulePathIT {
         assertInvalidConfiguration("-jar", path("etsiorg.fatJar").toString());
     }
 
+    @Test
+    void environmentVariableTest() throws IOException, InterruptedException {
+        String output = start(Main.INVALID_CONFIGURATION, Map.of("ETSIORG_URI", INVALID_URI), "-jar", path("etsiorg.fatJar").toString());
+        assertTrue(output.contains("Invalid configuration: Only http and https are supported: " + INVALID_URI), output);
+    }
+
+    @Test
+    void helpTest() throws IOException, InterruptedException {
+        String output = start(Main.SUCCESS, Map.of(), "-jar", path("etsiorg.fatJar").toString(), "--help");
+        assertTrue(output.startsWith("Usage: etsiorg-downloader"), output);
+        assertTrue(output.contains("ETSIORG_URI"), output);
+    }
+
     /**
      * Start the downloader with an invalid start uri: it has to log the error with logback and exit with status 2
      * @param launch arguments that launch the downloader
      */
     private static void assertInvalidConfiguration(String... launch) throws IOException, InterruptedException {
+        List<String> arguments = new ArrayList<>(List.of("-Duri=" + INVALID_URI));
+        arguments.addAll(List.of(launch));
+        String output = start(Main.INVALID_CONFIGURATION, Map.of(), arguments.toArray(String[]::new));
+        assertTrue(output.contains("Invalid configuration: Only http and https are supported: " + INVALID_URI), output);
+    }
+
+    /**
+     * Start the downloader with the logging configuration of the project and wait for its exit status
+     * @param exitStatus expected exit status
+     * @param environment environment variables of the downloader in addition to the inherited ones without its settings
+     * @param arguments arguments of java that launch the downloader
+     * @return standard output and error of the downloader
+     */
+    private static String start(int exitStatus, Map<String, String> environment, String... arguments) throws IOException, InterruptedException {
         List<String> command = new ArrayList<>(List.of(
                 Path.of(System.getProperty("java.home"), "bin", "java").toString(),
-                "-Dlogback.configurationFile=" + path("etsiorg.logbackConfiguration"),
-                "-Duri=" + INVALID_URI));
-        command.addAll(List.of(launch));
-        Process process = new ProcessBuilder(command).redirectErrorStream(true).start();
+                "-Dlogback.configurationFile=" + path("etsiorg.logbackConfiguration")));
+        command.addAll(List.of(arguments));
+        ProcessBuilder builder = new ProcessBuilder(command).redirectErrorStream(true);
+        builder.environment().keySet().removeIf(name -> name.startsWith("ETSIORG_"));
+        builder.environment().putAll(environment);
+        Process process = builder.start();
         String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
         assertTrue(process.waitFor(60, TimeUnit.SECONDS), output);
-        assertEquals(Main.INVALID_CONFIGURATION, process.exitValue(), output);
-        assertTrue(output.contains("Invalid configuration: Only http and https are supported: " + INVALID_URI), output);
+        assertEquals(exitStatus, process.exitValue(), output);
+        return output;
     }
 
     private static Path path(String property) {

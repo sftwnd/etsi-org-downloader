@@ -18,3 +18,4 @@
 | [0010](0010-maven-wrapper.md) | Сборка через Maven Wrapper с настройками проекта | [0010](../0010-maven-wrapper.md) |
 | [0011](0011-jpms-module.md) | Загрузчик — именованный модуль (JPMS) | [0011](../0011-jpms-module.md) |
 | [0012](0012-continuous-integration.md) | Сборка и тесты каждого изменения в GitHub Actions | [0012](../0012-continuous-integration.md) |
+| [0013](0013-settings-sources.md) | Настройки — системное свойство, иначе переменная окружения, иначе значение по умолчанию | [0013](../0013-settings-sources.md) |
