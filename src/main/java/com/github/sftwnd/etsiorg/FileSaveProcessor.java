@@ -95,12 +95,12 @@ public class FileSaveProcessor implements Processor<CompletableFuture<Stream<Pat
                         outputStream.flush();
                     }
                     syncFileTime(filePath, false);
-                    logger.info("File: '{}' has been saved", filePath);
+                    logger.info("File: '{}' has been saved", Printable.of(filePath));
                 }
                 return filePath;
             }
         } catch (IOException ioex) {
-            logger.error("Unable to write file: '{}' by cause: {}", filePath, ioex.getMessage());
+            logger.error("Unable to write file: '{}' by cause: {}", Printable.of(filePath), Printable.of(ioex.getMessage()));
             if (Files.isRegularFile(filePath)) {
                 try {
                     Files.delete(filePath);
@@ -123,16 +123,16 @@ public class FileSaveProcessor implements Processor<CompletableFuture<Stream<Pat
             if (Files.isRegularFile(filePath)) {
                 long fileSize = Files.size(filePath);
                 if (fileSize < contentLength) {
-                    logger.warn("Continue loading from offset {} of the file: '{}'", fileSize, filePath);
+                    logger.warn("Continue loading from offset {} of the file: '{}'", fileSize, Printable.of(filePath));
                     return fileSize;
                 } else if (fileSize > contentLength) {
-                    logger.warn("Actual size: {} is larger than expected: {} for the file: '{}'", fileSize, page.getHref().getBytes(), filePath);
+                    logger.warn("Actual size: {} is larger than expected: {} for the file: '{}'", fileSize, page.getHref().getBytes(), Printable.of(filePath));
                 } else {
-                    logger.debug("File: '{}' already exists.", filePath);
+                    logger.debug("File: '{}' already exists.", Printable.of(filePath));
                 }
                 syncFileTime(filePath, true);
             } else {
-                logger.trace("Unable to create file: '{}'. Folder with such name already exists.", filePath);
+                logger.trace("Unable to create file: '{}'. Folder with such name already exists.", Printable.of(filePath));
             }
             return -1L;
         }
@@ -151,7 +151,7 @@ public class FileSaveProcessor implements Processor<CompletableFuture<Stream<Pat
                 Files.setAttribute(filePath, "creationTime", creationFileTime);
                 Files.setLastModifiedTime(filePath, creationFileTime);
                 if (checkForChange) {
-                    logger.warn("File: '{}' already exists. Creation time has been reset to: {}", filePath, dateTime);
+                    logger.warn("File: '{}' already exists. Creation time has been reset to: {}", Printable.of(filePath), dateTime);
                 }
             }
         }
@@ -166,7 +166,7 @@ public class FileSaveProcessor implements Processor<CompletableFuture<Stream<Pat
         if (folderPath != null) {
             if (Files.exists(folderPath)) {
                 if (Files.isRegularFile(folderPath)) {
-                    logger.error("Unable to create folder: '{}'. File with such name exists.", folderPath);
+                    logger.error("Unable to create folder: '{}'. File with such name exists.", Printable.of(folderPath));
                     return false;
                 }
             } else {
@@ -174,7 +174,7 @@ public class FileSaveProcessor implements Processor<CompletableFuture<Stream<Pat
                     Files.createDirectories(folderPath);
                 } catch (FileAlreadyExistsException ignore) {
                 } catch (IOException ioex) {
-                    logger.error("Unable to create folder: '{}'. Cause: {}", folderPath, ioex.getMessage());
+                    logger.error("Unable to create folder: '{}'. Cause: {}", Printable.of(folderPath), Printable.of(ioex.getMessage()));
                     return false;
                 }
             }

@@ -76,7 +76,7 @@ public class Main {
                 delete(expired);
             }
         } catch (Exception exception) {
-            logger.warn("Unable to delete expired path: '{}'. Cause: {} {}", expired, exception.getClass().getSimpleName(), exception.getMessage());
+            logger.warn("Unable to delete expired path: '{}'. Cause: {} {}", Printable.of(expired), exception.getClass().getSimpleName(), Printable.of(exception.getMessage()));
         }
     }
 
@@ -90,10 +90,10 @@ public class Main {
         }
         try {
             if (Files.deleteIfExists(path)) {
-                logger.debug("{}: '{}' has been deleted", isRegular ? "File" : "Directory", path);
+                logger.debug("{}: '{}' has been deleted", isRegular ? "File" : "Directory", Printable.of(path));
             }
         } catch (IOException ioex) {
-            logger.warn("Unable to delete {}: '{}'. Cause: {} {}", isRegular ? "File" : "Directory", path, ioex.getClass().getSimpleName(), ioex.getMessage());
+            logger.warn("Unable to delete {}: '{}'. Cause: {} {}", isRegular ? "File" : "Directory", Printable.of(path), ioex.getClass().getSimpleName(), Printable.of(ioex.getMessage()));
         }
     }
 
