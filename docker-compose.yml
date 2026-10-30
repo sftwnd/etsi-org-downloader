@@ -11,5 +11,11 @@ services:
       - /tmp
     security_opt:
       - no-new-privileges:true
+    logging:
+      # a run logs a line per file: the log is rotated, at most 5 files of 10 MB
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "5"
     volumes:
       - ./deliver:/data/deliver

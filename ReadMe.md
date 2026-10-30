@@ -99,7 +99,8 @@ The image is built from the sources with `./mvnw` without the tests, which run i
 the downloader as a non-root user (UID 10001) with a read-only file system; only `./deliver` is mounted, and the mirror
 is stored there. On Linux create the folder and make it writable for the user before the first start,
 e.g. `mkdir -p deliver && sudo chown 10001 deliver`. The log of the container is not colored: the image sets
-`NO_COLOR=1`.
+`NO_COLOR=1`. A run logs a line per file, so the log is rotated: at most five files of 10 MB (`logging`
+in `docker-compose.yml`), and `docker logs` shows what they hold.
 
 Properties are passed with `JDK_JAVA_OPTIONS`:
 
