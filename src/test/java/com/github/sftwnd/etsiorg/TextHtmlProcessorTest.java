@@ -28,7 +28,6 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -53,7 +52,7 @@ class TextHtmlProcessorTest extends AbstractFileSourceTest {
     void textHtmlProcessorNullPageTest() {
         assertThrows(
                 NullPointerException.class,
-                () -> new TextHtmlProcessor(this.<Page>nullRef().get(), mock(ProcessorFactory.class), linkPolicy(), mock(Executor.class), mock(Consumer.class))
+                () -> new TextHtmlProcessor(this.<Page>nullRef().get(), mock(ProcessorFactory.class), linkPolicy(), mock(Executor.class), mock(Function.class))
         );
     }
 
@@ -67,7 +66,7 @@ class TextHtmlProcessorTest extends AbstractFileSourceTest {
                         this.<ProcessorFactory<CompletableFuture<Summary>>>nullRef().get(),
                         linkPolicy(),
                         mock(Executor.class),
-                        mock(Consumer.class)));
+                        mock(Function.class)));
     }
 
     @Test
@@ -80,7 +79,7 @@ class TextHtmlProcessorTest extends AbstractFileSourceTest {
                         mock(ProcessorFactory.class),
                         this.<LinkPolicy>nullRef().get(),
                         mock(Executor.class),
-                        mock(Consumer.class)));
+                        mock(Function.class)));
     }
 
     @Test
@@ -155,15 +154,15 @@ class TextHtmlProcessorTest extends AbstractFileSourceTest {
         CompletableFuture<Summary> result = new TextHtmlProcessor(this.page, factory, linkPolicy(), DIRECT, this.onExpires).process();
         assertFalse(result.isDone());
         assertNull(this.excluded);
-        actual.complete(Summary.DOWNLOADED);
-        assertEquals(Summary.DOWNLOADED, result.join());
+        actual.complete(Summary.downloaded(1L));
+        assertEquals(Summary.downloaded(1L).plus(Summary.removed(VERSION_EXCLUDES.size())), result.join());
         assertEquals(VERSION_EXCLUDES, this.excluded);
     }
 
     @Test
     void failedActualVersionKeepsExpiredTest() throws IOException {
         startUp("versions");
-        ProcessorFactory<CompletableFuture<Summary>> factory = page -> () -> CompletableFuture.completedFuture(Summary.FAILED.plus(Summary.DOWNLOADED));
+        ProcessorFactory<CompletableFuture<Summary>> factory = page -> () -> CompletableFuture.completedFuture(Summary.FAILED.plus(Summary.downloaded(1L)));
         Summary summary = new TextHtmlProcessor(this.page, factory, linkPolicy(), DIRECT, this.onExpires).process().join();
         assertEquals(1L, summary.getFailed());
         assertNull(this.excluded);
@@ -172,8 +171,8 @@ class TextHtmlProcessorTest extends AbstractFileSourceTest {
     @Test
     void failedRemovalIsFailureTest() throws IOException {
         startUp("versions");
-        ProcessorFactory<CompletableFuture<Summary>> factory = page -> () -> CompletableFuture.completedFuture(Summary.DOWNLOADED);
-        Consumer<Collection<URI>> failingRemoval = expired -> {
+        ProcessorFactory<CompletableFuture<Summary>> factory = page -> () -> CompletableFuture.completedFuture(Summary.downloaded(1L));
+        Function<Collection<URI>, Summary> failingRemoval = expired -> {
             throw new IllegalStateException("removal failed");
         };
         Summary summary = new TextHtmlProcessor(this.page, factory, linkPolicy(), DIRECT, failingRemoval).process().join();
@@ -195,7 +194,7 @@ class TextHtmlProcessorTest extends AbstractFileSourceTest {
         startUp("files");
         ProcessorFactory<CompletableFuture<Summary>> failing = page -> page.fileName().endsWith(".pdf")
                 ? () -> { throw new IllegalStateException("broken processor"); }
-                : () -> CompletableFuture.completedFuture(Summary.DOWNLOADED);
+                : () -> CompletableFuture.completedFuture(Summary.downloaded(1L));
         Summary summary = new TextHtmlProcessor(this.page, failing, linkPolicy(), DIRECT, this.onExpires).process().join();
         assertEquals(1L, summary.getDownloaded());
         assertEquals(1L, summary.getFailed());
@@ -306,7 +305,7 @@ class TextHtmlProcessorTest extends AbstractFileSourceTest {
     }
 
     private ProcessorFactory<CompletableFuture<Summary>> processorFactory;
-    private Consumer<Collection<URI>> onExpires;
+    private Function<Collection<URI>, Summary> onExpires;
     private Collection<Path> paths;
     private Collection<Path> excludes;
     private Collection<Path> excluded;
@@ -322,7 +321,10 @@ class TextHtmlProcessorTest extends AbstractFileSourceTest {
         this.excludes = RESULTS_MAP.get(name + "-excludes");
         this.excluded = null;
         this.processorFactory = spy(new FooProcessorFactory());
-        this.onExpires = list -> this.excluded = list.stream().map(uri -> Path.of(uri.getPath())).collect(Collectors.toList());
+        this.onExpires = list -> {
+            this.excluded = list.stream().map(uri -> Path.of(uri.getPath())).collect(Collectors.toList());
+            return Summary.removed(list.size());
+        };
     }
 
     private @NonNull TextHtmlProcessor textHtmlProcessor(@NonNull Page page) {
@@ -352,7 +354,7 @@ class TextHtmlProcessorTest extends AbstractFileSourceTest {
         public Processor<CompletableFuture<Summary>> processor(@NonNull Page page) {
             processed.add(page.getHref());
             threads.add(Thread.currentThread().getName());
-            return () -> CompletableFuture.completedFuture(Summary.DOWNLOADED);
+            return () -> CompletableFuture.completedFuture(Summary.downloaded(1L));
         }
     }
 

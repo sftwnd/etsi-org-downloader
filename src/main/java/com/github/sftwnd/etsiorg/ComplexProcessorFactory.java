@@ -6,45 +6,40 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.net.URI;
-import java.time.ZoneId;
 import java.util.Collection;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
-import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
- * Choose transformer by file header and delegate transform operation
+ * Chooses the processor of a resource: a folder is a listing, a log or temporary file is skipped, and any other file
+ * goes to the processor of the files, which saves it in a run and plans it in a dry run
  */
 @Getter
 @Slf4j
 public class ComplexProcessorFactory implements ProcessorFactory<CompletableFuture<Summary>> {
 
-    private final Destination destination;
-    private final ZoneId zone;
+    private final ProcessorFactory<CompletableFuture<Summary>> files;
     private final LinkPolicy linkPolicy;
     private final Executor executor;
-    private final Consumer<Collection<URI>> onExpires;
+    private final Function<Collection<URI>, Summary> onExpires;
 
-    public ComplexProcessorFactory(@NonNull Destination destination,
-                                   @NonNull ZoneId zone,
+    /**
+     * Constructor of the processor factory
+     * @param files processor factory of the files
+     * @param linkPolicy policy of the links to follow
+     * @param executor executor of the resource processing
+     * @param onExpires handler of the expired resources with the summary of their removal
+     */
+    public ComplexProcessorFactory(@NonNull ProcessorFactory<CompletableFuture<Summary>> files,
                                    @NonNull LinkPolicy linkPolicy,
                                    @NonNull Executor executor,
-                                   @Nullable Consumer<Collection<URI>> onExpires) {
-        this.destination = Objects.requireNonNull(destination, "ComplexProcessorFactory::new - destination is null");
-        this.zone = Objects.requireNonNull(zone, "ComplexProcessorFactory::new - zone is null");
+                                   @Nullable Function<Collection<URI>, Summary> onExpires) {
+        this.files = Objects.requireNonNull(files, "ComplexProcessorFactory::new - files is null");
         this.linkPolicy = Objects.requireNonNull(linkPolicy, "ComplexProcessorFactory::new - linkPolicy is null");
         this.executor = Objects.requireNonNull(executor, "ComplexProcessorFactory::new - executor is null");
         this.onExpires = onExpires;
-    }
-
-    /**
-     * Instantiate File Save Processor from the page reference
-     * @param page the page reference
-     * @return Processor to load file from the page reference
-     */
-    private Processor<CompletableFuture<Summary>> fileSaveProcessor(@NonNull Page page) {
-        return new FileSaveProcessor(destination, zone, page);
     }
 
     /**
@@ -65,7 +60,7 @@ public class ComplexProcessorFactory implements ProcessorFactory<CompletableFutu
     public @NonNull Processor<CompletableFuture<Summary>> processor(@NonNull Page page) {
         return ! page.getHref().isRegularFile() ? this.textHtmlProcessor(page)
                 : page.fileName().endsWith(".log") || page.fileName().endsWith(".tmp") || page.fileName().endsWith(".temp") ? EmptyProcessor.DEFAULT
-                : this.fileSaveProcessor(page);
+                : this.files.processor(page);
     }
 
 }

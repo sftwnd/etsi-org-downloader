@@ -123,6 +123,48 @@ class MainTest {
         }
     }
 
+    @Test
+    void dryRunTest() throws Exception {
+        AtomicInteger fileRequests = new AtomicInteger();
+        HttpServer server = server(true, fileRequests);
+        try {
+            Path dest = this.tempDir.resolve("mirror");
+            Map<String, String> properties = new HashMap<>(properties(server));
+            properties.put("dest", dest.toString());
+            properties.put("dry-run", "true");
+            assertEquals(Main.SUCCESS, run(properties, Map.of()));
+            assertEquals(0, fileRequests.get());
+            assertTrue(this.requests.get() > 0);
+            assertTrue(Files.notExists(dest));
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    @SuppressWarnings("try")
+    void dryRunNeedsNoLockTest() throws Exception {
+        HttpServer server = server(true, new AtomicInteger());
+        try (RunLock ignored = RunLock.tryAcquire(this.tempDir.resolve(".etsiorg-downloader.lock")).orElseThrow()) {
+            Map<String, String> properties = new HashMap<>(properties(server));
+            properties.put("dry-run", "true");
+            assertEquals(Main.SUCCESS, run(properties, Map.of()));
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    void sizeTest() {
+        assertEquals("0 B", Main.size(0));
+        assertEquals("1023 B", Main.size(1023));
+        assertEquals("1.0 KiB", Main.size(1024));
+        assertEquals("1.5 KiB", Main.size(1536));
+        assertEquals("5.0 MiB", Main.size(5L << 20));
+        assertEquals("2.5 GiB", Main.size(5L << 29));
+        assertEquals("8.0 EiB", Main.size(Long.MAX_VALUE));
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"-h", "--help"})
     void helpTest(String argument) {

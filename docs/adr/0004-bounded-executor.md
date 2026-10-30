@@ -2,8 +2,8 @@
 
 - Status: Accepted
 - Date: 2026-10-30
-- Amended: 2026-10-30 — 4 threads by default instead of the number of processors (#57); `Settings` and `RunLock`
-  in the component diagram (#61, #62)
+- Amended: 2026-10-30 — 4 threads by default instead of the number of processors (#57); `Settings`, `RunLock` and
+  the dry run in the component diagram (#61, #62, #64)
 - Russian version: [ADR-0004](ru/0004-bounded-executor.md)
 
 ## Context
@@ -64,10 +64,10 @@ C4Component
         Component(policy, "LinkPolicy", "Java", "Accepted links, visited resources")
         Component(factory, "ComplexProcessorFactory", "Java", "Choice of the resource processor")
         Component(html, "TextHtmlProcessor", "Java", "Listing parsing, version choice, children in the pool")
-        Component(file, "FileSaveProcessor", "Java", "File download with resume")
+        Component(file, "FileSaveProcessor", "Java", "File download with resume, or its plan in a dry run")
         Component(page, "Page", "Java", "HTTP: timeouts, retries, Range")
         Component(dest, "Destination", "Java", "URI to a path inside the destination folder")
-        Component(remover, "ExpiredRemover", "Java", "Removal of expired versions")
+        Component(remover, "ExpiredRemover", "Java", "Removal of expired versions, or its plan in a dry run")
         Component(lock, "RunLock", "Java", "One run at a time per destination folder")
     }
     ContainerDb(fs, "Destination folder", "File system", "Mirror deliver/...")

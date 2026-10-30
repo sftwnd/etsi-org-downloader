@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-10-30
+- Amended: 2026-10-30 — the size of the downloaded files and the number of the removed expired versions (#64)
 - Russian version: [ADR-0007](ru/0007-summary-result.md)
 
 ## Context
@@ -17,8 +18,11 @@ The processors returned `CompletableFuture<Stream<Path>>` — a stream of the pa
 
 - The result of processing is an immutable `Summary` value with the numbers of downloaded and up to date files;
   `Processor<CompletableFuture<Summary>>` for all the processors.
-- `FileSaveProcessor` returns `Summary.DOWNLOADED`, `Summary.UP_TO_DATE` or `Summary.EMPTY`
+- `FileSaveProcessor` returns `Summary.downloaded(bytes)`, `Summary.UP_TO_DATE` or `Summary.EMPTY`
   (the file is not saved: an error, or the file is held by another task); `EmptyProcessor` returns `Summary.EMPTY`.
+- `Summary` also has the size of the downloaded files and the number of the expired versions whose local copies have
+  been removed: the handler of the expired versions returns `Summary.removed(count)`. A dry run counts what a run would
+  download and remove ([ADR-0015](0015-dry-run.md)).
 - `TextHtmlProcessor` adds up the results of its children (`Summary::plus`) when all of them are completed.
 - `Main` prints the numbers of downloaded and up to date files.
 
