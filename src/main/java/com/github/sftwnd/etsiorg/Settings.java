@@ -38,6 +38,12 @@ public final class Settings {
         // "https://www.etsi.org/deliver/etsi_ts/136500_136599/13652103/17.01.00_60/";
 
     /**
+     * Default destination folder in the current folder: the folder {@code docker-compose.yml} mounts as well,
+     * so {@code run.sh} and a container mirror to the same place
+     */
+    static final String DEFAULT_DEST = "mirror";
+
+    /**
      * Default number of the threads, i.e. of the simultaneous requests to the site: the load on the site does not
      * depend on the number of processors of the machine
      */
@@ -51,7 +57,7 @@ public final class Settings {
     enum Key {
 
         URI("uri", "site folder to mirror; only links inside it are followed", DEFAULT_URI),
-        DEST("dest", "destination folder; files are stored under their path on the site", "the current folder"),
+        DEST("dest", "destination folder; files are stored under their path on the site", "./" + DEFAULT_DEST),
         THREADS("threads", "threads that process listings and files, i.e. simultaneous requests", String.valueOf(DEFAULT_THREADS)),
         ZONE("zone", "time zone of the listing time; www.etsi.org lists it in UTC", "UTC"),
         DRY_RUN("dry-run", "true: walk the listings and report what a run would download and remove, changing nothing", "false");
@@ -173,12 +179,12 @@ public final class Settings {
     /**
      * Destination folder
      * @param value trimmed value of the setting or null
-     * @return path, the current folder by default
+     * @return path, {@link #DEFAULT_DEST} in the current folder by default
      * @throws IllegalArgumentException if the value is not a path
      */
     private static @NonNull Path dest(@Nullable String value) {
         try {
-            return Path.of(value == null ? "." : value);
+            return Path.of(value == null ? DEFAULT_DEST : value);
         } catch (InvalidPathException ipex) {
             throw new IllegalArgumentException("Invalid destination folder: " + Printable.of(ipex.getMessage()), ipex);
         }

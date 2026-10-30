@@ -2,7 +2,8 @@
 
 - Status: Accepted
 - Date: 2026-10-30
-- Amended: 2026-10-30 — the name of the image, its labels and the version of the downloader (#69)
+- Amended: 2026-10-30 — the name of the image, its labels and the version of the downloader (#69); the host folder
+  of the mirror is set with `ETSIORG_DEST` (#91)
 - Russian version: [ADR-0017](ru/0017-jlink-runtime-image.md)
 
 ## Context
@@ -65,7 +66,7 @@ C4Deployment
         Deployment_Node(container, "Container etsiorg", "gcr.io/distroless/base-debian12, user nonroot, read-only, 1 GiB, 2 CPUs") {
             Container(app, "etsiorg-downloader", "Java 11 runtime built by jlink", "Module com.github.sftwnd.etsiorg with SLF4J, logback and jdk.crypto.ec")
         }
-        Deployment_Node(volume, "Mirror folder", "./mirror or ETSIORG_MIRROR, mounted at /data") {
+        Deployment_Node(volume, "Mirror folder", "./mirror or ETSIORG_DEST, mounted at /data") {
             ContainerDb(mirror, "Mirror", "File system", "deliver/..., .etsiorg-downloader.lock")
         }
     }

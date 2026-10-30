@@ -29,5 +29,6 @@ services:
         max-size: 10m
         max-file: "5"
     volumes:
-      # the whole destination folder of the image (-Ddest=/data): ./mirror or the host folder ETSIORG_MIRROR names
-      - ${ETSIORG_MIRROR:-./mirror}:/data
+      # the whole destination folder of the image (ETSIORG_DEST=/data): ./mirror, the default destination folder of
+      # run.sh as well, or the host folder ETSIORG_DEST names in the environment of docker compose or in .env
+      - ${ETSIORG_DEST:-./mirror}:/data
