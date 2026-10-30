@@ -59,7 +59,7 @@ It starts the jar with the JDK the Maven Wrapper builds it with: `$JAVA_HOME/bin
 |-------------|---------------------------------|----------------------------------------------------------------------|
 | `-Duri`     | `https://www.etsi.org/deliver/` | Site folder to mirror; only links inside it are followed             |
 | `-Ddest`    | `.`                             | Destination folder; files are stored under their path on the site    |
-| `-Dthreads` | number of processors            | Threads that process listings and files, i.e. simultaneous requests  |
+| `-Dthreads` | `4`                             | Threads that process listings and files, i.e. simultaneous requests  |
 | `-Dzone`    | `UTC`                           | Time zone of the listing time; www.etsi.org lists it in UTC          |
 
 The log is colored for a terminal. As [no-color.org](https://no-color.org) suggests, `NO_COLOR` set to a non-empty value
@@ -107,7 +107,7 @@ in `docker-compose.yml`), and `docker logs` shows what they hold.
 Properties are passed with `JDK_JAVA_OPTIONS`:
 
 ```console
-docker compose run --rm -e JDK_JAVA_OPTIONS="-Duri=https://www.etsi.org/deliver/etsi_ts/ -Dthreads=4" etsiorg
+docker compose run --rm -e JDK_JAVA_OPTIONS="-Duri=https://www.etsi.org/deliver/etsi_ts/ -Dthreads=2" etsiorg
 ```
 
 To remove the image:

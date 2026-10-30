@@ -34,6 +34,12 @@ public class Main {
     private static final String ZONE_PROPERTY = "zone";
 
     /**
+     * Default number of the threads, i.e. of the simultaneous requests to the site: the load on the site does not
+     * depend on the number of processors of the machine
+     */
+    static final int DEFAULT_THREADS = 4;
+
+    /**
      * Exit status of a run without failures
      */
     static final int SUCCESS = 0;
@@ -98,12 +104,12 @@ public class Main {
     /**
      * Number of the threads that process the resources, which is also the limit of the simultaneous requests
      * @param value value of the property or null
-     * @return positive number of the threads, the number of available processors by default
+     * @return positive number of the threads, {@link #DEFAULT_THREADS} by default
      * @throws IllegalArgumentException if the value is not a positive integer
      */
     static int threads(@Nullable String value) {
         if (value == null || value.isBlank()) {
-            return Runtime.getRuntime().availableProcessors();
+            return DEFAULT_THREADS;
         }
         try {
             int threads = Integer.parseInt(value.trim());

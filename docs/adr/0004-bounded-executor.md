@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-10-30
+- Amended: 2026-10-30 — 4 threads by default instead of the number of processors (#57)
 - Russian version: [ADR-0004](ru/0004-bounded-executor.md)
 
 ## Context
@@ -22,8 +23,8 @@ and the pool from `Main` only merged the results:
 - The whole processing of a resource — creating the `Page`, choosing the processor, parsing a listing or
   downloading — runs as a task `supplyAsync(..., executor)` of the pool from `Main`; the result is unwrapped with
   `thenCompose(identity())`, and merging the results of the children (`allOf`) creates no separate tasks.
-- The pool size is set with the `-Dthreads` property (the number of available processors by default); the executor
-  is mandatory for `ComplexProcessorFactory` and `TextHtmlProcessor`.
+- The pool size is set with the `-Dthreads` property, 4 by default; the executor is mandatory
+  for `ComplexProcessorFactory` and `TextHtmlProcessor`.
 - Tasks do not wait for each other with blocking calls: a parent returns a future and does not hold a thread while
   its children are processed.
 - `User-Agent: etsiorg-downloader (+https://github.com/sftwnd/etsi-org-downloader)`.
@@ -34,6 +35,9 @@ and the pool from `Main` only merged the results:
   and it does not depend on the implicit rules `CompletableFuture` uses to choose a pool.
 - A separate semaphore for the number of requests is not needed (KISS): every HTTP request runs as a task of the pool,
   so a pool of N threads gives at most N simultaneous requests.
+- The default is chosen for the load on the site, not for the machine: the number of processors has nothing to do with
+  it, and a container on a machine with 16 processors sees all 16 of them, which made 16 simultaneous requests to
+  www.etsi.org. 4 requests are fewer than the 6 connections to one host a browser opens over HTTP/1.1.
 - Without blocking waits inside a fixed-size pool, a deadlock where all the threads wait for tasks that have no thread
   to run in is impossible; composition with `thenCompose` keeps this property.
 - An honest User-Agent lets the site administrators see who is accessing the site and get in touch; it has been
@@ -43,7 +47,8 @@ and the pool from `Main` only merged the results:
 
 - The pool queue is not bounded: it holds the tasks for the resources found but not processed yet, so memory grows
   with the "front" of the crawl, not with the number of threads.
-- By default the parallelism equals the number of CPUs; for a slow link or a gentle mode — `-Dthreads=2`.
+- By default the parallelism is 4 on any machine; `-Dthreads` raises it for a fast link or lowers it for a gentle
+  mode, e.g. `-Dthreads=2`.
 
 ## Component diagram (C4, level 3)
 

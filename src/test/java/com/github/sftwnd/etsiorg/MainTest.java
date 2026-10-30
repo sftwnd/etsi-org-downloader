@@ -36,13 +36,13 @@ class MainTest {
 
     @Test
     void defaultThreadsTest() {
-        assertEquals(Runtime.getRuntime().availableProcessors(), Main.threads(null));
-        assertEquals(Runtime.getRuntime().availableProcessors(), Main.threads(" "));
+        assertEquals(4, Main.threads(null));
+        assertEquals(4, Main.threads(" "));
     }
 
     @Test
     void threadsTest() {
-        assertEquals(4, Main.threads("4"));
+        assertEquals(2, Main.threads("2"));
         assertEquals(16, Main.threads(" 16 "));
     }
 
