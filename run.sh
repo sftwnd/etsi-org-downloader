@@ -1,8 +1,11 @@
 #!/bin/bash
+# Mirrors the ETSI documents tree. Arguments are passed to the JVM, e.g.: ./run.sh -Ddest=/data/etsi
+set -euo pipefail
 ETSI_ORG_VERSION=1.3-SNAPSHOT
-ETSI_ORG_JAR="etsiorg-downloader-${ETSI_ORG_VERSION}-jar-with-dependencies.jar"
-LOGBACK_FILE="./src/main/resources/logback.xml"
-if [ ! -f "target/${ETSI_ORG_JAR}" ]; then
-  mvn -Dmaven.repo.local=${HOME}/.m2 clean package
+ETSI_ORG_HOME="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ETSI_ORG_JAR="${ETSI_ORG_HOME}/target/etsiorg-downloader-${ETSI_ORG_VERSION}-jar-with-dependencies.jar"
+LOGBACK_FILE="${ETSI_ORG_HOME}/src/main/resources/logback.xml"
+if [ ! -f "${ETSI_ORG_JAR}" ]; then
+  mvn -B -f "${ETSI_ORG_HOME}/pom.xml" clean package
 fi
-java -Dlogback.configurationFile=${LOGBACK_FILE} -jar target/${ETSI_ORG_JAR}
+exec java -Dlogback.configurationFile="${LOGBACK_FILE}" "$@" -jar "${ETSI_ORG_JAR}"
