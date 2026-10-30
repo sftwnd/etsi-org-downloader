@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
@@ -29,7 +30,15 @@ class FileSaveProcessorTest extends AbstractFileSourceTest {
         var future = this.fileSaveProcessor.process();
         assertTrue(future::isDone);
         assertDoesNotThrow(future::join);
-        assertEquals(List.of(tempFile), future.join().collect(Collectors.toList()));
+        assertEquals(List.of(tempFile.toAbsolutePath()), future.join().collect(Collectors.toList()));
+    }
+
+    @Test
+    void processOutsideDestinationTest() {
+        Path outside = root().resolve("..").resolve(tempFile.getFileName()).toAbsolutePath().normalize();
+        when(this.href.getUri()).thenReturn(URI.create("http://localhost/../" + tempFile.getFileName()));
+        assertEquals(List.of(), this.fileSaveProcessor.process().join().collect(Collectors.toList()));
+        assertTrue(Files.notExists(outside));
     }
 
     @Test
@@ -56,14 +65,6 @@ class FileSaveProcessorTest extends AbstractFileSourceTest {
         assertArrayEquals(Arrays.copyOf(this.buff, fileSize), Files.readAllBytes(path));
     }
 
-    @Test
-    void getRoot() {
-    }
-
-    @Test
-    void getPage() {
-    }
-
     private FileSaveProcessor fileSaveProcessor;
 
     private final static String TEMPDIR_BASE = "target/fileSaveProcessorTest.test";
@@ -85,6 +86,11 @@ class FileSaveProcessorTest extends AbstractFileSourceTest {
         return tempFile.getFileName();
     }
 
+    @Override
+    URI uri() {
+        return URI.create("http://localhost/" + tempDir.getFileName() + "/" + tempFile.getFileName());
+    }
+
     @BeforeEach
     void startUp() throws IOException {
         this.tempDir = Files.createDirectories(Path.of(TEMPDIR_BASE));
@@ -94,7 +100,7 @@ class FileSaveProcessorTest extends AbstractFileSourceTest {
 
         this.fileSaveProcessor = mock(FileSaveProcessor.class);
         when(this.fileSaveProcessor.getPage()).thenReturn(this.page);
-        when(this.fileSaveProcessor.getRoot()).thenReturn(this.root);
+        when(this.fileSaveProcessor.getDestination()).thenReturn(new Destination(root()));
         when(this.fileSaveProcessor.process()).thenCallRealMethod();
     }
 

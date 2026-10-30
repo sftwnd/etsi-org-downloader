@@ -44,7 +44,8 @@ public class Main {
             URI uri = new URI(Optional.ofNullable(System.getProperty(URI_PROPERTY))
                     .filter(Predicate.not(String::isBlank))
                     .orElse(DEFAULT_URI));
-            var processorFactory = new ComplexProcessorFactory(dest, executor, getOnnExpires(dest));
+            Destination destination = new Destination(dest);
+            var processorFactory = new ComplexProcessorFactory(destination, executor, getOnExpires(destination));
             processorFactory
                     .processor(Page.of(HREF.builder().uri(uri).build()))
                     .process()
@@ -63,11 +64,21 @@ public class Main {
         }
     }
 
-    private static Consumer<Collection<Path>> getOnnExpires(@NonNull Path root) {
+    private static Consumer<Collection<URI>> getOnExpires(@NonNull Destination destination) {
         return expires -> expires.stream()
-                .map(path -> Path.of(root.toString(), path.toString()))
+                .map(uri -> localPath(destination, uri))
+                .flatMap(Optional::stream)
                 .sorted()
                 .forEach(Main::onExpire);
+    }
+
+    private static Optional<Path> localPath(@NonNull Destination destination, @NonNull URI uri) {
+        try {
+            return Optional.of(destination.pathOf(uri));
+        } catch (IllegalArgumentException iaex) {
+            logger.warn("Expired path is skipped. {}", iaex.getMessage());
+            return Optional.empty();
+        }
     }
 
     private static void onExpire(@NonNull Path expired) {

@@ -20,7 +20,7 @@ public final class Printable {
      */
     public static @NonNull String of(@Nullable Object value) {
         String text = String.valueOf(value);
-        if (text.codePoints().noneMatch(Printable::isUnsafe)) {
+        if (isPrintable(text)) {
             return text;
         }
         StringBuilder result = new StringBuilder(text.length() + 16);
@@ -32,6 +32,15 @@ public final class Printable {
             }
         });
         return result.toString();
+    }
+
+    /**
+     * Check that the text has no characters to escape
+     * @param text text to check
+     * @return true if the text has no control, format and line or paragraph separator characters
+     */
+    public static boolean isPrintable(@NonNull String text) {
+        return text.codePoints().noneMatch(Printable::isUnsafe);
     }
 
     /**

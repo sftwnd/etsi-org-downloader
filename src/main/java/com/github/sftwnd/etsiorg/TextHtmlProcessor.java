@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URI;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.Arrays;
@@ -37,7 +38,7 @@ public class TextHtmlProcessor implements Processor<CompletableFuture<Stream<Pat
     private final Page page;
     private final ProcessorFactory<CompletableFuture<Stream<Path>>> processorFactory;
     private final Executor executor;
-    private final Consumer<Collection<Path>> onExpires;
+    private final Consumer<Collection<URI>> onExpires;
 
     /**
      * Constructor of Text Html Processor
@@ -49,7 +50,7 @@ public class TextHtmlProcessor implements Processor<CompletableFuture<Stream<Pat
     TextHtmlProcessor(@NonNull Page page,
                       @NonNull ProcessorFactory<CompletableFuture<Stream<Path>>> processorFactory,
                       @Nullable Executor executor,
-                      @Nullable Consumer<Collection<Path>> onExpires) {
+                      @Nullable Consumer<Collection<URI>> onExpires) {
         this.page = Objects.requireNonNull(page, "TextHtmlProcessor::new - page is null");
         this.processorFactory = Objects.requireNonNull(processorFactory, "TextHtmlProcessor::new - processorFactory is null");
         this.executor = executor;
@@ -182,7 +183,7 @@ public class TextHtmlProcessor implements Processor<CompletableFuture<Stream<Pat
                                 Optional.of(versionedHrefs
                                                 .stream()
                                                 .filter(Predicate.not(href -> href == actualRef))
-                                                .map(HREF::path)
+                                                .map(HREF::getUri)
                                                 .collect(Collectors.toList()))
                                         .filter(Predicate.not(Collection::isEmpty))
                                         .ifPresent(this.getOnExpires());

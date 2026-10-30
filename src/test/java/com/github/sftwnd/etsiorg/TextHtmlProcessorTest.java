@@ -8,6 +8,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.net.URI;
 import java.nio.file.Path;
 import java.util.Collection;
 import java.util.List;
@@ -86,7 +87,7 @@ class TextHtmlProcessorTest extends AbstractFileSourceTest {
     }
 
     private ProcessorFactory<CompletableFuture<Stream<Path>>> processorFactory;
-    private Consumer<Collection<Path>> onExpires;
+    private Consumer<Collection<URI>> onExpires;
     private Collection<Path> paths;
     private Collection<Path> excludes;
     private Collection<Path> excluded;
@@ -97,7 +98,7 @@ class TextHtmlProcessorTest extends AbstractFileSourceTest {
         this.excludes = RESULTS_MAP.get(name + "-excludes");
         this.excluded = null;
         this.processorFactory = spy(new FooProcessorFactory());
-        this.onExpires = list -> this.excluded = list;
+        this.onExpires = list -> this.excluded = list.stream().map(uri -> Path.of(uri.getPath())).collect(Collectors.toList());
     }
 
     private @NonNull TextHtmlProcessor textHtmlProcessor(@NonNull Page page) {

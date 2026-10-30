@@ -5,6 +5,7 @@ import edu.umd.cs.findbugs.annotations.Nullable;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
+import java.net.URI;
 import java.nio.file.Path;
 import java.util.Collection;
 import java.util.Objects;
@@ -20,12 +21,12 @@ import java.util.stream.Stream;
 @Slf4j
 public class ComplexProcessorFactory implements ProcessorFactory<CompletableFuture<Stream<Path>>> {
 
-    private final Path root;
+    private final Destination destination;
     private final Executor executor;
-    private final Consumer<Collection<Path>> onExpires;
+    private final Consumer<Collection<URI>> onExpires;
 
-    public ComplexProcessorFactory(@Nullable Path root, @Nullable Executor executor, @Nullable Consumer<Collection<Path>> onExpires) {
-        this.root = Objects.requireNonNull(root, "ComplexProcessorFactory::new - root path is null");
+    public ComplexProcessorFactory(@NonNull Destination destination, @Nullable Executor executor, @Nullable Consumer<Collection<URI>> onExpires) {
+        this.destination = Objects.requireNonNull(destination, "ComplexProcessorFactory::new - destination is null");
         this.executor = executor;
         this.onExpires = onExpires;
     }
@@ -36,7 +37,7 @@ public class ComplexProcessorFactory implements ProcessorFactory<CompletableFutu
      * @return Processor to load file from the page reference
      */
     private Processor<CompletableFuture<Stream<Path>>> fileSaveProcessor(@NonNull Page page) {
-        return new FileSaveProcessor(root, page);
+        return new FileSaveProcessor(destination, page);
     }
 
     /**
