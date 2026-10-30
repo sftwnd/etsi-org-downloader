@@ -8,6 +8,7 @@ import org.mockito.Mockito;
 
 import java.net.URI;
 import java.nio.file.Path;
+import java.time.ZoneId;
 import java.util.Collection;
 import java.util.concurrent.Executor;
 import java.util.function.Consumer;
@@ -46,6 +47,7 @@ class ComplexProcessorFactoryTest {
         FileSaveProcessor fileSaveProcessor = (FileSaveProcessor)processor;
         assertEquals(this.page, fileSaveProcessor.getPage());
         assertSame(this.destination, fileSaveProcessor.getDestination());
+        assertSame(this.zone, fileSaveProcessor.getZone());
     }
 
     @Test
@@ -66,17 +68,22 @@ class ComplexProcessorFactoryTest {
 
     @Test
     void nullDestinationConstructorTest() {
-        assertThrows(NullPointerException.class, () -> new ComplexProcessorFactory(null, this.linkPolicy, this.executor, this.onExpires));
+        assertThrows(NullPointerException.class, () -> new ComplexProcessorFactory(null, this.zone, this.linkPolicy, this.executor, this.onExpires));
+    }
+
+    @Test
+    void nullZoneConstructorTest() {
+        assertThrows(NullPointerException.class, () -> new ComplexProcessorFactory(this.destination, null, this.linkPolicy, this.executor, this.onExpires));
     }
 
     @Test
     void nullExecutorConstructorTest() {
-        assertThrows(NullPointerException.class, () -> new ComplexProcessorFactory(this.destination, this.linkPolicy, null, this.onExpires));
+        assertThrows(NullPointerException.class, () -> new ComplexProcessorFactory(this.destination, this.zone, this.linkPolicy, null, this.onExpires));
     }
 
     @Test
     void nullLinkPolicyConstructorTest() {
-        assertThrows(NullPointerException.class, () -> new ComplexProcessorFactory(this.destination, null, this.executor, this.onExpires));
+        assertThrows(NullPointerException.class, () -> new ComplexProcessorFactory(this.destination, this.zone, null, this.executor, this.onExpires));
     }
 
     @Test
@@ -109,7 +116,8 @@ class ComplexProcessorFactoryTest {
         this.linkPolicy = new LinkPolicy(URI.create("http://localhost/deliver/"));
         this.executor = mock(Executor.class);
         this.onExpires = (Consumer<Collection<URI>>)Mockito.mock(Consumer.class);
-        this.factory = spy(new ComplexProcessorFactory(this.destination, this.linkPolicy, this.executor, this.onExpires));
+        this.zone = ZoneId.of("Europe/Paris");
+        this.factory = spy(new ComplexProcessorFactory(this.destination, this.zone, this.linkPolicy, this.executor, this.onExpires));
     }
 
     @AfterEach
@@ -126,6 +134,7 @@ class ComplexProcessorFactoryTest {
     private HREF href;
     private Page page;
     private Destination destination;
+    private ZoneId zone;
     private LinkPolicy linkPolicy;
     private Executor executor;
     private Consumer<Collection<URI>> onExpires;

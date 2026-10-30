@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.net.URI;
 import java.nio.file.Path;
+import java.time.ZoneId;
 import java.util.Collection;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
@@ -22,15 +23,18 @@ import java.util.stream.Stream;
 public class ComplexProcessorFactory implements ProcessorFactory<CompletableFuture<Stream<Path>>> {
 
     private final Destination destination;
+    private final ZoneId zone;
     private final LinkPolicy linkPolicy;
     private final Executor executor;
     private final Consumer<Collection<URI>> onExpires;
 
     public ComplexProcessorFactory(@NonNull Destination destination,
+                                   @NonNull ZoneId zone,
                                    @NonNull LinkPolicy linkPolicy,
                                    @NonNull Executor executor,
                                    @Nullable Consumer<Collection<URI>> onExpires) {
         this.destination = Objects.requireNonNull(destination, "ComplexProcessorFactory::new - destination is null");
+        this.zone = Objects.requireNonNull(zone, "ComplexProcessorFactory::new - zone is null");
         this.linkPolicy = Objects.requireNonNull(linkPolicy, "ComplexProcessorFactory::new - linkPolicy is null");
         this.executor = Objects.requireNonNull(executor, "ComplexProcessorFactory::new - executor is null");
         this.onExpires = onExpires;
@@ -42,7 +46,7 @@ public class ComplexProcessorFactory implements ProcessorFactory<CompletableFutu
      * @return Processor to load file from the page reference
      */
     private Processor<CompletableFuture<Stream<Path>>> fileSaveProcessor(@NonNull Page page) {
-        return new FileSaveProcessor(destination, page);
+        return new FileSaveProcessor(destination, zone, page);
     }
 
     /**

@@ -1,11 +1,15 @@
 package com.github.sftwnd.etsiorg;
 
+import edu.umd.cs.findbugs.annotations.NonNull;
 import edu.umd.cs.findbugs.annotations.Nullable;
 import lombok.extern.slf4j.Slf4j;
 
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.file.Path;
+import java.time.DateTimeException;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.Collection;
 import java.util.Optional;
 import java.util.concurrent.ExecutorService;
@@ -30,15 +34,18 @@ public class Main {
     private static final String URI_PROPERTY = "uri";
     private static final String DEST_PROPERTY = "dest";
     private static final String THREADS_PROPERTY = "threads";
+    private static final String ZONE_PROPERTY = "zone";
 
     public static void main(String[] args) {
         LinkPolicy linkPolicy;
         int threads;
+        ZoneId zone;
         try {
             linkPolicy = new LinkPolicy(new URI(Optional.ofNullable(System.getProperty(URI_PROPERTY))
                     .filter(Predicate.not(String::isBlank))
                     .orElse(DEFAULT_URI)));
             threads = threads(System.getProperty(THREADS_PROPERTY));
+            zone = zone(System.getProperty(ZONE_PROPERTY));
         } catch (URISyntaxException | IllegalArgumentException exception) {
             logger.error("Invalid configuration: {}", Printable.of(exception.getMessage()));
             return;
@@ -50,8 +57,9 @@ public class Main {
                     .map(Path::of)
                     .orElseGet(() -> Path.of("."));
             Destination destination = new Destination(dest);
-            logger.info("Mirroring '{}' to '{}' with {} threads", Printable.of(linkPolicy.getRoot()), Printable.of(destination.getRoot()), threads);
-            var processorFactory = new ComplexProcessorFactory(destination, linkPolicy, executor, new ExpiredRemover(destination));
+            logger.info("Mirroring '{}' to '{}' with {} threads, listing time zone: {}",
+                    Printable.of(linkPolicy.getRoot()), Printable.of(destination.getRoot()), threads, zone);
+            var processorFactory = new ComplexProcessorFactory(destination, zone, linkPolicy, executor, new ExpiredRemover(destination));
             linkPolicy.visit(linkPolicy.getRoot());
             processorFactory
                     .processor(Page.of(HREF.builder().uri(linkPolicy.getRoot()).build()))
@@ -90,6 +98,23 @@ public class Main {
             // reported below
         }
         throw new IllegalArgumentException("Number of threads has to be a positive integer: " + Printable.of(value));
+    }
+
+    /**
+     * Time zone of the listing time: www.etsi.org lists the time in UTC
+     * @param value value of the property or null
+     * @return time zone, UTC by default
+     * @throws IllegalArgumentException if the value is not a time zone id
+     */
+    static @NonNull ZoneId zone(@Nullable String value) {
+        if (value == null || value.isBlank()) {
+            return ZoneOffset.UTC;
+        }
+        try {
+            return ZoneId.of(value.trim());
+        } catch (DateTimeException dtex) {
+            throw new IllegalArgumentException("Unknown time zone: " + Printable.of(value), dtex);
+        }
     }
 
 }

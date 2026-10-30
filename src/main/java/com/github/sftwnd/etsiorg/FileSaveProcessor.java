@@ -16,6 +16,7 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.FileTime;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.Objects;
 import java.util.Optional;
@@ -37,10 +38,18 @@ public class FileSaveProcessor implements Processor<CompletableFuture<Stream<Pat
     private static final int BUFFER_SIZE = 64 << 10;
 
     private final Destination destination;
+    private final ZoneId zone;
     private final Page page;
 
-    FileSaveProcessor(@NonNull Destination destination, @NonNull Page page) {
+    /**
+     * Constructor of the file save processor
+     * @param destination destination folder of the mirror
+     * @param zone time zone of the listing time
+     * @param page page of the file
+     */
+    FileSaveProcessor(@NonNull Destination destination, @NonNull ZoneId zone, @NonNull Page page) {
         this.destination = Objects.requireNonNull(destination, "FileSaveProcessor::new - destination is null");
+        this.zone = Objects.requireNonNull(zone, "FileSaveProcessor::new - zone is null");
         this.page = Objects.requireNonNull(page, "FileSaveProcessor::new - page is null");
     }
 
@@ -172,7 +181,7 @@ public class FileSaveProcessor implements Processor<CompletableFuture<Stream<Pat
         if (dateTime != null) {
             BasicFileAttributes attr = Files.readAttributes(filePath, BasicFileAttributes.class);
             Instant creationInstant = attr.creationTime().toInstant().truncatedTo(ChronoUnit.SECONDS);
-            Instant creationDateTime = page.dateTime();
+            Instant creationDateTime = dateTime.atZone(this.getZone()).toInstant().truncatedTo(ChronoUnit.SECONDS);
             if (! creationInstant.equals(creationDateTime)) {
                 FileTime creationFileTime = FileTime.from(creationDateTime);
                 Files.setAttribute(filePath, "creationTime", creationFileTime);
