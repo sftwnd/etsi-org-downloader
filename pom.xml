@@ -31,6 +31,13 @@
         <maven.compiler.source>11</maven.compiler.source>
         <maven.compiler.target>11</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <javaModuleName>com.github.sftwnd.etsiorg</javaModuleName>
+        <!-- the tests are patched into the module and use what the module does not require: the HTTP server of the JDK
+             and logback, which is bound to SLF4J as its service provider and whose configurator reads XML. javac takes
+             logback from the class path, Surefire puts it on the module path with the other dependencies of the module -->
+        <test.compile.addModules>jdk.httpserver,java.xml</test.compile.addModules>
+        <test.compile.addReads>${javaModuleName}=jdk.httpserver</test.compile.addReads>
+        <test.run.addReads>${javaModuleName}=jdk.httpserver,ch.qos.logback.classic,ch.qos.logback.core</test.run.addReads>
         <!-- the latest releases that support Java 11: no alpha and beta versions, no 4.0.0 plugins (they require Maven 4) -->
         <!-- logback 1.6 is built for Java 11 -->
         <logback.version>1.6.6</logback.version>
@@ -44,7 +51,9 @@
         <maven-assembly-plugin.version>3.8.0</maven-assembly-plugin.version>
         <maven-clean-plugin.version>3.5.0</maven-clean-plugin.version>
         <maven-compiler-plugin.version>3.16.0</maven-compiler-plugin.version>
+        <maven-dependency-plugin.version>3.11.0</maven-dependency-plugin.version>
         <maven-deploy-plugin.version>3.2.0</maven-deploy-plugin.version>
+        <maven-failsafe-plugin.version>3.6.1</maven-failsafe-plugin.version>
         <maven-install-plugin.version>3.2.0</maven-install-plugin.version>
         <maven-jar-plugin.version>3.5.1</maven-jar-plugin.version>
         <maven-resources-plugin.version>3.5.0</maven-resources-plugin.version>
@@ -114,6 +123,27 @@
                     </compilerArgs>
                     <showWarnings>true</showWarnings>
                 </configuration>
+                <executions>
+                    <execution>
+                        <id>default-testCompile</id>
+                        <configuration>
+                            <compilerArgs combine.children="append">
+                                <arg>--add-modules</arg>
+                                <arg>${test.compile.addModules}</arg>
+                                <arg>--add-reads</arg>
+                                <arg>${test.compile.addReads}</arg>
+                            </compilerArgs>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <argLine>--add-reads ${test.run.addReads}</argLine>
+                </configuration>
             </plugin>
 
             <plugin>
@@ -123,7 +153,32 @@
                     <excludes>
                         <exclude>logback*.xml</exclude>
                     </excludes>
+                    <archive>
+                        <manifest>
+                            <!-- the jar of a module: the main class is set in the module descriptor as well -->
+                            <mainClass>com.github.sftwnd.etsiorg.Main</mainClass>
+                        </manifest>
+                    </archive>
                 </configuration>
+            </plugin>
+
+            <plugin>
+                <!-- the modules the downloader needs at runtime, for the module path -->
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>copy-modules</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>copy-dependencies</goal>
+                        </goals>
+                        <configuration>
+                            <includeScope>runtime</includeScope>
+                            <outputDirectory>${project.build.directory}/lib</outputDirectory>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
 
             <plugin>
@@ -150,12 +205,12 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-assembly-plugin</artifactId>
                 <configuration>
-                    <descriptorRefs>
-                        <descriptorRef>jar-with-dependencies</descriptorRef>
-                    </descriptorRefs>
+                    <!-- jar-with-dependencies without the module descriptors: the fat jar is for the class path -->
+                    <descriptors>
+                        <descriptor>src/assembly/jar-with-dependencies.xml</descriptor>
+                    </descriptors>
                     <archive>
                         <manifest>
-                            <addClasspath>true</addClasspath>
                             <mainClass>com.github.sftwnd.etsiorg.Main</mainClass>
                         </manifest>
                     </archive>
@@ -166,6 +221,29 @@
                             <goal>single</goal>
                         </goals>
                         <phase>package</phase>
+                    </execution>
+                </executions>
+            </plugin>
+
+
+            <plugin>
+                <!-- the packaged jars: the module runs on the module path, the fat jar on the class path -->
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <configuration>
+                    <systemPropertyVariables>
+                        <etsiorg.moduleJar>${project.build.directory}/${project.build.finalName}.jar</etsiorg.moduleJar>
+                        <etsiorg.modulePath>${project.build.directory}/lib</etsiorg.modulePath>
+                        <etsiorg.fatJar>${project.build.directory}/${project.build.finalName}-jar-with-dependencies.jar</etsiorg.fatJar>
+                        <etsiorg.logbackConfiguration>${project.basedir}/src/main/resources/logback.xml</etsiorg.logbackConfiguration>
+                    </systemPropertyVariables>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
                     </execution>
                 </executions>
             </plugin>
@@ -192,8 +270,18 @@
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-dependency-plugin</artifactId>
+                    <version>${maven-dependency-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-deploy-plugin</artifactId>
                     <version>${maven-deploy-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-failsafe-plugin</artifactId>
+                    <version>${maven-failsafe-plugin.version}</version>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
