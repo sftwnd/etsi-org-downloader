@@ -154,6 +154,16 @@ public class TextHtmlProcessor implements Processor<CompletableFuture<Stream<Pat
             CASE_INSENSITIVE);
 
     /**
+     * Any link of the listing with its text
+     */
+    private static final Pattern ANCHOR = Pattern.compile("<a\\s[^>]*>([^<]*)</a>", CASE_INSENSITIVE);
+
+    /**
+     * Text of the link to the parent folder, which is not a listing entry
+     */
+    private static final String PARENT_DIRECTORY = "[To Parent Directory]";
+
+    /**
      * Maximal size of a listing: the largest ETSI listings are tens of kilobytes
      */
     static final int MAX_LISTING_SIZE = 4 << 20;
@@ -164,14 +174,21 @@ public class TextHtmlProcessor implements Processor<CompletableFuture<Stream<Pat
      * @return list of uri to load
      */
     private @NonNull Stream<HREF> parseFile(@NonNull Page page) throws IOException {
-        Matcher matcher = REF_PATTERN.matcher(loadFile(page));
+        String listing = loadFile(page);
+        Matcher matcher = REF_PATTERN.matcher(listing);
         Collection<HREF> hrefs = new LinkedList<>();
         Collection<HREF> versionedHrefs = new LinkedList<>();
+        long entries = 0;
         while (matcher.find()) {
-            URI uri = page.getUri().resolve("/").resolve(matcher.group(9));
+            entries++;
+            boolean folder = matcher.group(8) != null;
+            URI uri = page.getUri().resolve(Html.unescape(matcher.group(9)));
             if (!this.getLinkPolicy().accepts(uri)) {
                 logger.warn("Link is outside of the mirrored folder and is skipped: '{}'", Printable.of(uri));
                 continue;
+            }
+            if (folder && !uri.getRawPath().endsWith("/")) {
+                uri = URI.create(uri + "/");
             }
             HREF href = HREF.builder()
                     .uri(uri)
@@ -184,13 +201,16 @@ public class TextHtmlProcessor implements Processor<CompletableFuture<Stream<Pat
                             Integer.parseInt(matcher.group(2)),
                             Integer.parseInt(matcher.group(4)) % 12 + ("P".equalsIgnoreCase(matcher.group(6)) ? 12 : 0),
                             Integer.parseInt(matcher.group(5))))
-                    .regularFile(! Optional.ofNullable(matcher.group(8))
-                            .map(String::toLowerCase).map(String::trim)
-                            .map("dir"::equals)
-                            .orElse(false))
+                    .regularFile(!folder)
                     .build();
             (href.isVersioned() ? versionedHrefs : hrefs).add(href);
             logger.trace("Found {}: {}", href.isRegularFile() ? "file" : "path", Printable.of(href));
+        }
+        long links = ANCHOR.matcher(listing).results()
+                .filter(anchor -> !PARENT_DIRECTORY.equals(anchor.group(1).trim()))
+                .count();
+        if (links > entries) {
+            logger.warn("{} of {} links are not recognized in the listing: '{}'", links - entries, links, Printable.of(page.path()));
         }
         versionedHrefs
                 .stream()
