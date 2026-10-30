@@ -177,7 +177,7 @@ class MainTest {
         assertTrue(help.startsWith("Usage: etsiorg-downloader [-h | --help]"), help);
         assertTrue(help.contains(Settings.help()), help);
         assertTrue(help.contains("0 - no failures, 1 - some resources have failed, 2 - invalid configuration, "
-                + "3 - another run mirrors to the destination folder"), help);
+                + "3 - out of memory, 4 - another run mirrors to the destination folder"), help);
     }
 
     @ParameterizedTest

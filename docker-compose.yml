@@ -12,6 +12,10 @@ services:
       - ETSIORG_THREADS
       - ETSIORG_ZONE
       - ETSIORG_DRY_RUN
+    # a run needs about 1.2 KB of heap per file of the tree: 1 GiB, 75 % of it for the heap, is enough for about
+    # 600 000 files; ETSIORG_MEMORY and ETSIORG_CPUS change the limits
+    mem_limit: ${ETSIORG_MEMORY:-1g}
+    cpus: ${ETSIORG_CPUS:-2}
     read_only: true
     tmpfs:
       - /tmp

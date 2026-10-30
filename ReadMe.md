@@ -103,7 +103,8 @@ failed: K` and the exit status:
 | `0`    | no failures                                                                                                                                                         |
 | `1`    | some resources have failed; a repeated run does not download the already downloaded files                                                                           |
 | `2`    | invalid configuration, found before the first request: an invalid setting, an argument other than `-h` and `--help`, or a destination folder that cannot be written |
-| `3`    | another run mirrors to the destination folder; nothing has been done                                                                                                |
+| `3`    | out of memory: the JVM ends the run on `OutOfMemoryError` (`-XX:+ExitOnOutOfMemoryError` of `run.sh` and the image)                                                 |
+| `4`    | another run mirrors to the destination folder; nothing has been done                                                                                                |
 
 ## Docker
 
@@ -120,6 +121,11 @@ e.g. `ETSIORG_MIRROR=/srv/etsi docker compose up`. The files are stored under th
 earlier version in `./deliver` of the project folder is moved once: `mkdir -p mirror && mv deliver mirror/`. The log of
 the container is not colored: the image sets `NO_COLOR=1`. A run logs a line per file, so the log is rotated: at most
 five files of 10 MB (`logging` in `docker-compose.yml`), and `docker logs` shows what they hold.
+
+The container is limited to 1 GiB of memory and 2 processors; `ETSIORG_MEMORY` and `ETSIORG_CPUS` change the limits,
+e.g. `ETSIORG_MEMORY=2g docker compose up`. The heap is 75 % of the memory limit. A run keeps about 1.2 KB of heap per
+file of the tree (measured on a synthetic tree), so 1 GiB is enough for about 600 000 files; a tree that does not fit
+ends with the status 3.
 
 The settings are environment variables: the image sets `ETSIORG_DEST=/data`, and `docker-compose.yml` passes
 `ETSIORG_URI`, `ETSIORG_THREADS`, `ETSIORG_ZONE` and `ETSIORG_DRY_RUN` from the environment of docker compose
