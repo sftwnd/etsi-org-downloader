@@ -6,21 +6,19 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.net.URI;
-import java.nio.file.Path;
 import java.time.ZoneId;
 import java.util.Collection;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.function.Consumer;
-import java.util.stream.Stream;
 
 /**
  * Choose transformer by file header and delegate transform operation
  */
 @Getter
 @Slf4j
-public class ComplexProcessorFactory implements ProcessorFactory<CompletableFuture<Stream<Path>>> {
+public class ComplexProcessorFactory implements ProcessorFactory<CompletableFuture<Summary>> {
 
     private final Destination destination;
     private final ZoneId zone;
@@ -45,7 +43,7 @@ public class ComplexProcessorFactory implements ProcessorFactory<CompletableFutu
      * @param page the page reference
      * @return Processor to load file from the page reference
      */
-    private Processor<CompletableFuture<Stream<Path>>> fileSaveProcessor(@NonNull Page page) {
+    private Processor<CompletableFuture<Summary>> fileSaveProcessor(@NonNull Page page) {
         return new FileSaveProcessor(destination, zone, page);
     }
 
@@ -54,7 +52,7 @@ public class ComplexProcessorFactory implements ProcessorFactory<CompletableFutu
      * @param page the page reference
      * @return Processor to load text/html, parse and initialize child files loading
      */
-    private Processor<CompletableFuture<Stream<Path>>> textHtmlProcessor(@NonNull Page page) {
+    private Processor<CompletableFuture<Summary>> textHtmlProcessor(@NonNull Page page) {
         return new TextHtmlProcessor(page, this, linkPolicy, executor, onExpires);
     }
 
@@ -64,7 +62,7 @@ public class ComplexProcessorFactory implements ProcessorFactory<CompletableFutu
      * @return processor for age
      */
     @Override
-    public @NonNull Processor<CompletableFuture<Stream<Path>>> processor(@NonNull Page page) {
+    public @NonNull Processor<CompletableFuture<Summary>> processor(@NonNull Page page) {
         return ! page.getHref().isRegularFile() ? this.textHtmlProcessor(page)
                 : page.fileName().endsWith(".log") || page.fileName().endsWith(".tmp") || page.fileName().endsWith(".temp") ? EmptyProcessor.DEFAULT
                 : this.fileSaveProcessor(page);

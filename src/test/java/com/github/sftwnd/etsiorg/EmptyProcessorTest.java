@@ -2,8 +2,6 @@ package com.github.sftwnd.etsiorg;
 
 import org.junit.jupiter.api.Test;
 
-import java.util.Collections;
-import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -29,7 +27,7 @@ class EmptyProcessorTest {
 
     @Test
     void processFutureCloseTest() {
-        assertEquals(Collections.emptyList(), EmptyProcessor.DEFAULT.process().join().collect(Collectors.toList()));
+        assertEquals(Summary.EMPTY, EmptyProcessor.DEFAULT.process().join());
     }
 
 }
