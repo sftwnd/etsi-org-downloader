@@ -1,0 +1,54 @@
+name: build
+
+on:
+  push:
+    branches: [ master, develop ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    name: JDK ${{ matrix.java }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        # 11 is the language level and the runtime of the image; run.sh starts the jar with any JDK of the user
+        java: [ '11', '17', '21', '25' ]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java }}
+          cache: maven
+      - name: Build and test
+        run: ./mvnw -B -ntp verify
+
+  docker:
+    name: Docker image
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Build the image
+        run: docker compose build
+      - name: Start the downloader
+        # an invalid configuration ends the run with status 2 before any request: the JVM, the jar and the logging
+        # configuration of the image are checked without the network
+        run: |
+          status=0
+          docker compose run --rm --env JDK_JAVA_OPTIONS=-Duri=ftp://example.org/ etsiorg || status=$?
+          test "${status}" -eq 2

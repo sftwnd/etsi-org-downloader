@@ -1,5 +1,7 @@
 # ETSI.ORG Documents Downloader
 
+[![Build](https://github.com/sftwnd/etsi-org-downloader/actions/workflows/build.yml/badge.svg)](https://github.com/sftwnd/etsi-org-downloader/actions/workflows/build.yml)
+
 A console tool that mirrors the document tree of ETSI, [www.etsi.org/deliver](https://www.etsi.org/deliver/),
 or one of its folders, to a local folder.
 
@@ -31,7 +33,8 @@ runs the tests and builds:
   it needs at runtime.
 
 `./mvnw test` runs the tests only (on the module path); `./mvnw verify` also starts the packaged jars on the module path
-and on the class path.
+and on the class path. Continuous integration ([build.yml](.github/workflows/build.yml)) runs `./mvnw verify` on JDK 11,
+17, 21 and 25 for every push and pull request and builds the Docker image.
 
 The Maven Wrapper (`mvnw`, `mvnw.cmd` on Windows) downloads the Maven version of the project once, checks the SHA-256
 of its distribution and runs it. Run it in the project folder: `.mvn/maven.config` applies the project settings
@@ -89,9 +92,10 @@ A run can be interrupted at any moment: the next run resumes the unfinished down
 docker compose up --build
 ```
 
-The image is built from the sources with `./mvnw` (the tests run during the build) and runs the downloader as a non-root user
-(UID 10001) with a read-only file system; only `./deliver` is mounted, and the mirror is stored there. On Linux create
-the folder and make it writable for the user before the first start, e.g. `mkdir -p deliver && sudo chown 10001 deliver`.
+The image is built from the sources with `./mvnw` without the tests, which run in continuous integration, and runs
+the downloader as a non-root user (UID 10001) with a read-only file system; only `./deliver` is mounted, and the mirror
+is stored there. On Linux create the folder and make it writable for the user before the first start,
+e.g. `mkdir -p deliver && sudo chown 10001 deliver`.
 
 Properties are passed with `JDK_JAVA_OPTIONS`:
 
