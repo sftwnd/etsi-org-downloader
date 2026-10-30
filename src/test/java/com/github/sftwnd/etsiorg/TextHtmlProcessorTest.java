@@ -26,6 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.when;
 
 class TextHtmlProcessorTest extends AbstractFileSourceTest {
 
@@ -95,6 +96,14 @@ class TextHtmlProcessorTest extends AbstractFileSourceTest {
     @Test
     void processUnpaddedVersionsHtmlTest() throws IOException {
         processFileTest("versions-unpadded");
+    }
+
+    @Test
+    void processPrematureEndOfListingTest() throws IOException {
+        startUp("files");
+        when(this.href.getBytes()).thenReturn(this.bytes + 10);
+        var completableFuture = assertDoesNotThrow(() -> this.textHtmlProcessor(this.page).process());
+        assertEquals(List.of(), assertDoesNotThrow(completableFuture::join).collect(Collectors.toList()));
     }
 
     void processFileTest(@NonNull String name) throws IOException {

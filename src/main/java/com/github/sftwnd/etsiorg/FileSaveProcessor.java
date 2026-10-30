@@ -8,6 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.io.EOFException;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -79,7 +80,7 @@ public class FileSaveProcessor implements Processor<CompletableFuture<Stream<Pat
                             try (var inputStream = page.inputStreamFrom(offset)) {
                                 int bufferOffset = 0;
                                 while (readed < contentLength) {
-                                    int bytes = inputStream.read(buff, bufferOffset, buff.length - bufferOffset);
+                                    int bytes = read(inputStream, buff, bufferOffset, readed, contentLength);
                                     if (bytes < 0) {
                                         if (bufferOffset > 0) {
                                             outputStream.write(buff, 0, bufferOffset);
@@ -115,6 +116,26 @@ public class FileSaveProcessor implements Processor<CompletableFuture<Stream<Pat
             }
         }
         return null;
+    }
+
+    /**
+     * Read the next part of the file; a failed read ends the stream, so the download continues from the current offset
+     * with a new connection
+     * @param inputStream stream of the file
+     * @param buff buffer to read to
+     * @param bufferOffset offset in the buffer
+     * @param readed number of the file bytes that have been read
+     * @param contentLength length of the file
+     * @return number of the read bytes or -1 if the stream has ended or failed
+     */
+    private int read(@NonNull InputStream inputStream, @NonNull byte[] buff, int bufferOffset, long readed, long contentLength) {
+        try {
+            return inputStream.read(buff, bufferOffset, buff.length - bufferOffset);
+        } catch (IOException ioex) {
+            logger.warn("Download has been interrupted at {} of {} bytes: '{}'. Cause: {}",
+                    readed, contentLength, Printable.of(this.getPage().path()), Printable.of(ioex.getMessage()));
+            return -1;
+        }
     }
 
     /**

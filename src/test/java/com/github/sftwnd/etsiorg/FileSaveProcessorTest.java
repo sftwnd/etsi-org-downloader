@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.SocketTimeoutException;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -63,6 +64,49 @@ class FileSaveProcessorTest extends AbstractFileSourceTest {
         Path path = this.fileSaveProcessor.process().join().findFirst().orElse(null);
         assertNotNull(path);
         assertArrayEquals(Arrays.copyOf(this.buff, fileSize), Files.readAllBytes(path));
+    }
+
+    @Test
+    void processInterruptedDownloadTest() throws IOException {
+        int fileSize = Long.valueOf(this.bytes).intValue();
+        int offset = fileSize / 3;
+        when(this.page.inputStreamFrom(0L)).thenReturn(new FailingInputStream(this.buff, offset));
+        when(this.page.inputStreamFrom(offset)).thenReturn(new ByteArrayInputStream(this.buff, offset, fileSize - offset));
+        Path path = this.fileSaveProcessor.process().join().findFirst().orElse(null);
+        assertNotNull(path);
+        assertArrayEquals(Arrays.copyOf(this.buff, fileSize), Files.readAllBytes(path));
+    }
+
+    /**
+     * Stream that fails with a timeout after the given number of bytes
+     */
+    private static class FailingInputStream extends InputStream {
+
+        private final byte[] buff;
+        private final int failAt;
+        private int position;
+
+        FailingInputStream(byte[] buff, int failAt) {
+            this.buff = buff;
+            this.failAt = failAt;
+        }
+
+        @Override
+        public int read() throws IOException {
+            byte[] one = new byte[1];
+            return read(one, 0, 1) < 0 ? -1 : one[0] & 0xFF;
+        }
+
+        @Override
+        public int read(byte[] target, int offset, int length) throws IOException {
+            if (this.position >= this.failAt) {
+                throw new SocketTimeoutException("Read timed out");
+            }
+            int count = Math.min(length, this.failAt - this.position);
+            System.arraycopy(this.buff, this.position, target, offset, count);
+            this.position += count;
+            return count;
+        }
     }
 
     private FileSaveProcessor fileSaveProcessor;

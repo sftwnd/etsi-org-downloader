@@ -5,6 +5,7 @@ import edu.umd.cs.findbugs.annotations.Nullable;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
+import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -224,11 +225,12 @@ public class TextHtmlProcessor implements Processor<CompletableFuture<Stream<Pat
     private @NonNull String loadFile(@NonNull Page page) throws IOException {
         byte[] buff = new byte[Long.valueOf(page.contentLength()).intValue()];
         try (InputStream inputStream = page.inputStream()) {
-            for (int readed = 0; readed < buff.length; ) {
-                readed += inputStream.read(buff, readed, buff.length - readed);
+            int readed = inputStream.readNBytes(buff, 0, buff.length);
+            if (readed < buff.length) {
+                throw new EOFException("Listing has ended after " + readed + " of " + buff.length + " bytes");
             }
         }
-        return new String(buff);
+        return new String(buff, page.charset());
     }
 
 }
