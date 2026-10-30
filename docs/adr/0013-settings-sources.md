@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-10-30
+- Amended: 2026-10-30 — the default destination folder is `./mirror`, the host folder of the container as well (#91)
 - Russian version: [ADR-0013](ru/0013-settings-sources.md)
 
 ## Context
@@ -21,6 +22,8 @@ itself, so its tests changed the global system properties.
   value, an invalid destination path included, is an `IllegalArgumentException`, i.e. the exit status 2
   ([ADR-0008](0008-error-isolation-exit-code.md)).
 - The names, meanings and defaults of the settings are the enum `Settings.Key`; the help is generated from it.
+- The default destination folder is `./mirror` of the current folder. `docker-compose.yml` mounts `./mirror` of the
+  project folder at `/data` and takes another host folder from `ETSIORG_DEST` as well.
 - `Main.run(args, properties, environment)` gets the sources as functions: `main` passes `System::getProperty` and
   `System::getenv`, the tests pass maps. `-h` or `--help` alone prints the usage, the settings and the exit statuses
   to the standard output with the status 0; any other argument is an invalid configuration with the status 2.
@@ -38,6 +41,9 @@ itself, so its tests changed the global system properties.
   not an error.
 - An unknown argument stops the run before it starts, so a mistyped option does not mirror the whole site with
   the default settings.
+- One default and one variable for the destination: `run.sh`, a start of the jar and a container keep the same
+  mirror, `./mirror/deliver`. A container cannot write to the current folder itself: it would have to mount the project
+  folder with the sources.
 - One description of the settings serves the parsing and the help, and they cannot diverge (DRY). `Main` only wires
   the run (SRP), and the settings are tested without the global system properties and environment.
 
@@ -46,3 +52,5 @@ itself, so its tests changed the global system properties.
 - `JDK_JAVA_OPTIONS` is not needed for the settings any more; it still passes options of the JVM.
 - A new setting is a constant of `Settings.Key`, a field of `Settings` and its parsing; the help shows it as it is.
 - The variables have the prefix `ETSIORG_` and do not collide with the environment of other programs.
+- A mirror of an earlier version, where the default was the current folder, is in `./deliver` and is moved once
+  to `./mirror`.

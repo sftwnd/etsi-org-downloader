@@ -49,9 +49,10 @@ of its distribution and runs it. Run it in the project folder: `.mvn/maven.confi
 ```
 
 The script builds the jar if it is missing or older than the files it is built from — `pom.xml`, `lombok.config`,
-`src/main` and `src/assembly` — and mirrors `https://www.etsi.org/deliver/` to `./deliver` of the current directory.
-It starts the jar with the JDK the Maven Wrapper builds it with: `$JAVA_HOME/bin/java`, or `java` from `PATH` if
-`JAVA_HOME` is not set. The options are passed to the JVM; `-h` or `--help` prints the settings.
+`src/main` and `src/assembly` — and mirrors `https://www.etsi.org/deliver/` to `./mirror/deliver` of the current
+directory, the folder `docker compose` mirrors to as well. It starts the jar with the JDK the Maven Wrapper builds it
+with: `$JAVA_HOME/bin/java`, or `java` from `PATH` if `JAVA_HOME` is not set. The options are passed to the JVM; `-h` or
+`--help` prints the settings.
 
 A setting is a system property or an environment variable; the property overrides the variable, and a blank value
 is not set. E.g. another site folder and destination:
@@ -64,10 +65,13 @@ ETSIORG_URI=https://www.etsi.org/deliver/etsi_ts/ ETSIORG_DEST=/data/etsi ./run.
 | Property    | Environment variable | Default                         | Meaning                                                             |
 |-------------|----------------------|---------------------------------|---------------------------------------------------------------------|
 | `-Duri`     | `ETSIORG_URI`        | `https://www.etsi.org/deliver/` | Site folder to mirror; only links inside it are followed            |
-| `-Ddest`    | `ETSIORG_DEST`       | `.`                             | Destination folder; files are stored under their path on the site   |
+| `-Ddest`    | `ETSIORG_DEST`       | `./mirror`                      | Destination folder; files are stored under their path on the site   |
 | `-Dthreads` | `ETSIORG_THREADS`    | `4`                             | Threads that process listings and files, i.e. simultaneous requests |
 | `-Dzone`    | `ETSIORG_ZONE`       | `UTC`                           | Time zone of the listing time; www.etsi.org lists it in UTC         |
 | `-Ddry-run` | `ETSIORG_DRY_RUN`    | `false`                         | `true`: report what a run would download and remove, change nothing |
+
+Earlier versions mirrored to `./deliver` by default. Such a mirror is moved once,
+`mkdir -p mirror && mv deliver mirror/`, otherwise the next run downloads it again to `./mirror`.
 
 A dry run walks the listings and reports the files to download with their size, the expired versions to remove and
 the free space of the destination folder; it downloads, removes and creates nothing, so it needs no write access and
@@ -117,13 +121,13 @@ docker compose up --build
 The image is built from the sources with `./mvnw` without the tests, which run in continuous integration. It holds a
 Java runtime linked by `jlink` from the modules of the downloader on `gcr.io/distroless/base-debian12`, about 60 MB, and
 runs the module as the user `nonroot` (UID 65532) with a read-only file system. Only the destination folder is mounted,
-at `/data`: `./mirror` of the project folder, or the host folder `ETSIORG_MIRROR` names in the environment or in `.env`,
-e.g. `ETSIORG_MIRROR=/srv/etsi docker compose up`. The files are stored under their path on the site,
-`mirror/deliver/...`. On Linux create the folder and make it writable for the user before the first start, e.g.
-`mkdir -p mirror && sudo chown 65532 mirror`; otherwise the run stops at once with the status 2. A mirror made by an
-earlier version in `./deliver` of the project folder is moved once: `mkdir -p mirror && mv deliver mirror/`. The log of
-the container is not colored: the image sets `NO_COLOR=1`. A run logs a line per file, so the log is rotated: at most
-five files of 10 MB (`logging` in `docker-compose.yml`), and `docker logs` shows what they hold.
+at `/data`: `./mirror` of the project folder, the default destination of `run.sh` as well, or the host folder
+`ETSIORG_DEST` names in the environment of docker compose or in `.env`, e.g. `ETSIORG_DEST=/srv/etsi docker compose up`.
+The files are stored under their path on the site, `mirror/deliver/...`. On Linux create the folder and make it writable
+for the user before the first start, e.g. `mkdir -p mirror && sudo chown 65532 mirror`; otherwise the run stops at once
+with the status 2. The log of the container is not colored: the image sets `NO_COLOR=1`. A run logs a line per file, so
+the log is rotated: at most five files of 10 MB (`logging` in `docker-compose.yml`), and `docker logs` shows what they
+hold.
 
 The container is limited to 1 GiB of memory and 2 processors; `ETSIORG_MEMORY` and `ETSIORG_CPUS` change the limits,
 e.g. `ETSIORG_MEMORY=2g docker compose up`. The heap is 75 % of the memory limit. A run keeps about 1.2 KB of heap per

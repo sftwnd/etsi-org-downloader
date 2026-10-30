@@ -2,7 +2,8 @@
 
 - Статус: Принято
 - Дата: 2026-10-30
-- Изменено: 2026-10-30 — имя образа, его метки и версия загрузчика (#69)
+- Изменено: 2026-10-30 — имя образа, его метки и версия загрузчика (#69); папка зеркала на хосте задаётся
+  `ETSIORG_DEST` (#91)
 - Версия на английском: [ADR-0017](../0017-jlink-runtime-image.md)
 
 ## Контекст
@@ -63,7 +64,7 @@ C4Deployment
         Deployment_Node(container, "Контейнер etsiorg", "gcr.io/distroless/base-debian12, пользователь nonroot, только чтение, 1 ГиБ, 2 CPU") {
             Container(app, "etsiorg-downloader", "Среда Java 11, собранная jlink", "Модуль com.github.sftwnd.etsiorg с SLF4J, logback и jdk.crypto.ec")
         }
-        Deployment_Node(volume, "Папка зеркала", "./mirror или ETSIORG_MIRROR, смонтирована в /data") {
+        Deployment_Node(volume, "Папка зеркала", "./mirror или ETSIORG_DEST, смонтирована в /data") {
             ContainerDb(mirror, "Зеркало", "Файловая система", "deliver/..., .etsiorg-downloader.lock")
         }
     }

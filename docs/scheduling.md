@@ -32,8 +32,8 @@ and removes its container when the run ends:
 15 3 * * * cd /opt/etsi-org-downloader && docker compose run --rm etsiorg > /var/log/etsiorg/mirror.log 2>&1
 ```
 
-`ETSIORG_MIRROR` in `.env` of the project folder sets the host folder of the mirror for both the manual and
-the scheduled runs.
+Both write to `./mirror` of the project folder by default. `ETSIORG_DEST` sets another folder: in the environment
+of `run.sh` or `docker compose`, or in `.env` of the project folder for every run of `docker compose`.
 
 ## systemd timer
 

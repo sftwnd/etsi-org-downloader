@@ -22,7 +22,7 @@ class SettingsTest {
     void defaultsTest() {
         Settings settings = settings(Map.of(), Map.of());
         assertEquals(URI.create("https://www.etsi.org/deliver/"), settings.getUri());
-        assertEquals(Path.of("."), settings.getDest());
+        assertEquals(Path.of("mirror"), settings.getDest());
         assertEquals(4, settings.getThreads());
         assertEquals(ZoneOffset.UTC, settings.getZone());
         assertFalse(settings.isDryRun());
@@ -78,7 +78,7 @@ class SettingsTest {
                 Map.of("ETSIORG_THREADS", "8", "ETSIORG_ZONE", " ", "ETSIORG_DEST", ""));
         assertEquals(8, settings.getThreads());
         assertEquals(ZoneOffset.UTC, settings.getZone());
-        assertEquals(Path.of("."), settings.getDest());
+        assertEquals(Path.of("mirror"), settings.getDest());
     }
 
     @Test
@@ -116,6 +116,7 @@ class SettingsTest {
         }
         assertTrue(help.contains("(default: https://www.etsi.org/deliver/)"), help);
         assertTrue(help.contains("(default: 4)"), help);
+        assertTrue(help.contains("(default: ./mirror)"), help);
     }
 
     private static Settings settings(Map<String, String> properties, Map<String, String> environment) {
