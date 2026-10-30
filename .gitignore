@@ -5,6 +5,9 @@ target/
 /deliver
 /mirror
 /.env
+# the files of the downloader in a destination folder: the lock of a run and the probe of the write access
+.etsiorg-downloader.lock
+.etsiorg-*.probe
 
 ### IntelliJ IDEA ###
 .idea/modules.xml
