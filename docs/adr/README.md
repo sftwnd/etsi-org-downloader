@@ -16,3 +16,4 @@ and the decision is added to both indexes.
 | [0008](0008-error-isolation-exit-code.md) | Error isolation and the exit status | [0008](ru/0008-error-isolation-exit-code.md) |
 | [0009](0009-expire-after-actual-version.md) | Remove expired versions after the actual version has been processed successfully | [0009](ru/0009-expire-after-actual-version.md) |
 | [0010](0010-maven-wrapper.md) | Build with the Maven Wrapper and the project settings | [0010](ru/0010-maven-wrapper.md) |
+| [0011](0011-jpms-module.md) | The downloader is a named module (JPMS) | [0011](ru/0011-jpms-module.md) |

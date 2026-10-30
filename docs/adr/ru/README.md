@@ -16,3 +16,4 @@
 | [0008](0008-error-isolation-exit-code.md) | Изоляция ошибок и код завершения | [0008](../0008-error-isolation-exit-code.md) |
 | [0009](0009-expire-after-actual-version.md) | Удаление устаревших версий после успешной обработки актуальной | [0009](../0009-expire-after-actual-version.md) |
 | [0010](0010-maven-wrapper.md) | Сборка через Maven Wrapper с настройками проекта | [0010](../0010-maven-wrapper.md) |
+| [0011](0011-jpms-module.md) | Загрузчик — именованный модуль (JPMS) | [0011](../0011-jpms-module.md) |

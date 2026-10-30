@@ -24,7 +24,14 @@ or one of its folders, to a local folder.
 ./mvnw clean package
 ```
 
-builds `target/etsiorg-downloader-<version>-jar-with-dependencies.jar` and runs the tests; `./mvnw test` runs the tests only.
+runs the tests and builds:
+
+- `target/etsiorg-downloader-<version>-jar-with-dependencies.jar` — the fat jar for the class path;
+- `target/etsiorg-downloader-<version>.jar` — the named module `com.github.sftwnd.etsiorg`, and `target/lib` — the modules
+  it needs at runtime.
+
+`./mvnw test` runs the tests only (on the module path); `./mvnw verify` also starts the packaged jars on the module path
+and on the class path.
 
 The Maven Wrapper (`mvnw`, `mvnw.cmd` on Windows) downloads the Maven version of the project once, checks the SHA-256
 of its distribution and runs it. Run it in the project folder: `.mvn/maven.config` applies the project settings
@@ -50,11 +57,19 @@ directory. The options are passed to the JVM, e.g. another site folder and desti
 | `-Dthreads` | number of processors            | Threads that process listings and files, i.e. simultaneous requests  |
 | `-Dzone`    | `UTC`                           | Time zone of the listing time; www.etsi.org lists it in UTC          |
 
-The jar can also be started directly; the logging configuration is not packed into it and is passed explicitly:
+The jars can also be started directly; the logging configuration is not packed into them and is passed explicitly.
+The fat jar on the class path:
 
 ```console
 java -Dlogback.configurationFile=src/main/resources/logback.xml -Duri=https://www.etsi.org/deliver/etsi_ts/ \
      -jar target/etsiorg-downloader-<version>-jar-with-dependencies.jar
+```
+
+The module on the module path; logback is found as the service provider of SLF4J:
+
+```console
+java -Dlogback.configurationFile=src/main/resources/logback.xml -Duri=https://www.etsi.org/deliver/etsi_ts/ \
+     --module-path target/etsiorg-downloader-<version>.jar:target/lib --module com.github.sftwnd.etsiorg
 ```
 
 A run can be interrupted at any moment: the next run resumes the unfinished downloads. It ends with the summary

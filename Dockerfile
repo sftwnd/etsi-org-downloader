@@ -10,7 +10,7 @@ WORKDIR /build
 COPY mvnw pom.xml lombok.config ./
 COPY .mvn ./.mvn
 COPY src ./src
-RUN --mount=type=cache,target=/root/.m2 ./mvnw -B -q package
+RUN --mount=type=cache,target=/root/.m2 ./mvnw -B -q verify
 
 # Runtime stage: Java runtime only, the mirror is written by a non-root user to the /data volume
 FROM eclipse-temurin:11-jre
