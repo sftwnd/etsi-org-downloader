@@ -38,6 +38,7 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.mockito.Mockito.doReturn;
@@ -52,7 +53,7 @@ class TextHtmlProcessorTest extends AbstractFileSourceTest {
     void textHtmlProcessorNullPageTest() {
         assertThrows(
                 NullPointerException.class,
-                () -> new TextHtmlProcessor(this.<Page>nullRef().get(), mock(ProcessorFactory.class), LINK_POLICY, mock(Executor.class), mock(Consumer.class))
+                () -> new TextHtmlProcessor(this.<Page>nullRef().get(), mock(ProcessorFactory.class), linkPolicy(), mock(Executor.class), mock(Consumer.class))
         );
     }
 
@@ -64,7 +65,7 @@ class TextHtmlProcessorTest extends AbstractFileSourceTest {
                 () -> new TextHtmlProcessor(
                         mock(Page.class),
                         this.<ProcessorFactory<CompletableFuture<Summary>>>nullRef().get(),
-                        LINK_POLICY,
+                        linkPolicy(),
                         mock(Executor.class),
                         mock(Consumer.class)));
     }
@@ -86,7 +87,7 @@ class TextHtmlProcessorTest extends AbstractFileSourceTest {
     @SuppressWarnings("unchecked")
     void textHtmlProcessorTest() {
         assertDoesNotThrow(
-                () -> new TextHtmlProcessor(mock(Page.class), mock(ProcessorFactory.class), LINK_POLICY, DIRECT, null)
+                () -> new TextHtmlProcessor(mock(Page.class), mock(ProcessorFactory.class), linkPolicy(), DIRECT, null)
         );
     }
 
@@ -95,7 +96,7 @@ class TextHtmlProcessorTest extends AbstractFileSourceTest {
     void textHtmlProcessorExecutorNull() {
         assertThrows(
                 NullPointerException.class,
-                () -> new TextHtmlProcessor(mock(Page.class), mock(ProcessorFactory.class), LINK_POLICY, this.<Executor>nullRef().get(), null)
+                () -> new TextHtmlProcessor(mock(Page.class), mock(ProcessorFactory.class), linkPolicy(), this.<Executor>nullRef().get(), null)
         );
     }
 
@@ -147,6 +148,40 @@ class TextHtmlProcessorTest extends AbstractFileSourceTest {
     }
 
     @Test
+    void expiredAfterActualVersionTest() throws IOException {
+        startUp("versions");
+        CompletableFuture<Summary> actual = new CompletableFuture<>();
+        ProcessorFactory<CompletableFuture<Summary>> factory = page -> () -> actual;
+        CompletableFuture<Summary> result = new TextHtmlProcessor(this.page, factory, linkPolicy(), DIRECT, this.onExpires).process();
+        assertFalse(result.isDone());
+        assertNull(this.excluded);
+        actual.complete(Summary.DOWNLOADED);
+        assertEquals(Summary.DOWNLOADED, result.join());
+        assertEquals(VERSION_EXCLUDES, this.excluded);
+    }
+
+    @Test
+    void failedActualVersionKeepsExpiredTest() throws IOException {
+        startUp("versions");
+        ProcessorFactory<CompletableFuture<Summary>> factory = page -> () -> CompletableFuture.completedFuture(Summary.FAILED.plus(Summary.DOWNLOADED));
+        Summary summary = new TextHtmlProcessor(this.page, factory, linkPolicy(), DIRECT, this.onExpires).process().join();
+        assertEquals(1L, summary.getFailed());
+        assertNull(this.excluded);
+    }
+
+    @Test
+    void failedRemovalIsFailureTest() throws IOException {
+        startUp("versions");
+        ProcessorFactory<CompletableFuture<Summary>> factory = page -> () -> CompletableFuture.completedFuture(Summary.DOWNLOADED);
+        Consumer<Collection<URI>> failingRemoval = expired -> {
+            throw new IllegalStateException("removal failed");
+        };
+        Summary summary = new TextHtmlProcessor(this.page, factory, linkPolicy(), DIRECT, failingRemoval).process().join();
+        assertEquals(1L, summary.getDownloaded());
+        assertEquals(1L, summary.getFailed());
+    }
+
+    @Test
     void invalidEntryIsIsolatedTest() throws IOException {
         startUp("invalid-entry");
         Summary summary = this.textHtmlProcessor(this.page).process().join();
@@ -161,7 +196,7 @@ class TextHtmlProcessorTest extends AbstractFileSourceTest {
         ProcessorFactory<CompletableFuture<Summary>> failing = page -> page.fileName().endsWith(".pdf")
                 ? () -> { throw new IllegalStateException("broken processor"); }
                 : () -> CompletableFuture.completedFuture(Summary.DOWNLOADED);
-        Summary summary = new TextHtmlProcessor(this.page, failing, LINK_POLICY, DIRECT, this.onExpires).process().join();
+        Summary summary = new TextHtmlProcessor(this.page, failing, linkPolicy(), DIRECT, this.onExpires).process().join();
         assertEquals(1L, summary.getDownloaded());
         assertEquals(1L, summary.getFailed());
     }
@@ -257,6 +292,13 @@ class TextHtmlProcessorTest extends AbstractFileSourceTest {
 
     private List<Path> processedPaths() {
         return ((FooProcessorFactory) this.processorFactory).processed.stream().map(HREF::path).collect(Collectors.toList());
+    }
+
+    /**
+     * New link policy: it keeps the visited resources, so it cannot be shared between tests
+     */
+    private static LinkPolicy linkPolicy() {
+        return new LinkPolicy(URI.create("http://localhost/deliver/"));
     }
 
     private <T> Supplier<T> nullRef() {
@@ -418,7 +460,6 @@ class TextHtmlProcessorTest extends AbstractFileSourceTest {
             .map(fileName -> Path.of("/deliver/etsi_ts/129000_129099/129011", fileName))
             .collect(Collectors.toList());
 
-    private static final LinkPolicy LINK_POLICY = new LinkPolicy(URI.create("http://localhost/deliver/"));
     private static final Executor DIRECT = Runnable::run;
 
     private static final Map<String, Collection<Path>> RESULTS_MAP = Map.of(

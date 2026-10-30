@@ -75,7 +75,10 @@ public class TextHtmlProcessor implements Processor<CompletableFuture<Summary>> 
         logger.debug("Start text/html process: '{}'", Printable.of(page.path()));
         try {
             Listing listing = parseFile(page);
-            var result = sum(listing.getHrefs().stream().filter(this::firstVisit).map(this::processChild))
+            var result = sum(Stream.concat(
+                            listing.getHrefs().stream().filter(this::firstVisit).map(this::processChild),
+                            Stream.ofNullable(listing.getActual()).filter(this::firstVisit)
+                                    .map(actual -> processActual(actual, listing.getExpired()))))
                     .thenApply(summary -> summary.plus(Summary.failed(listing.getInvalid())));
             logger.trace("Text/html page has been processed: '{}'", Printable.of(page.path()));
             return result;
@@ -83,6 +86,32 @@ public class TextHtmlProcessor implements Processor<CompletableFuture<Summary>> 
             logger.error("Unable to process text/html page: '{}'. Cause[{}]: {}", Printable.of(page.path()), exception.getClass().getSimpleName(), Printable.of(exception.getMessage()));
             return CompletableFuture.completedFuture(Summary.FAILED);
         }
+    }
+
+    /**
+     * Process the actual version and remove the local copies of the expired versions only if the actual version
+     * has been processed without failures
+     * @param actual reference to the actual version
+     * @param expired uris of the expired versions
+     * @return summary of the actual version and of the removal
+     */
+    private @NonNull CompletableFuture<Summary> processActual(@NonNull HREF actual, @NonNull List<URI> expired) {
+        return processChild(actual).thenApply(summary -> {
+            if (expired.isEmpty() || this.getOnExpires() == null) {
+                return summary;
+            }
+            if (summary.getFailed() > 0) {
+                logger.warn("Expired versions are kept: the actual version '{}' has {} failures", Printable.of(actual.path()), summary.getFailed());
+                return summary;
+            }
+            try {
+                this.getOnExpires().accept(expired);
+                return summary;
+            } catch (RuntimeException rex) {
+                logger.error("Unable to remove expired versions of: '{}'. Cause: {} {}", Printable.of(actual.path()), rex.getClass().getSimpleName(), Printable.of(rex.getMessage()));
+                return summary.plus(Summary.FAILED);
+            }
+        });
     }
 
     /**
@@ -212,25 +241,16 @@ public class TextHtmlProcessor implements Processor<CompletableFuture<Summary>> 
         if (links > entries) {
             logger.warn("{} of {} links are not recognized in the listing: '{}'", links - entries, links, Printable.of(page.path()));
         }
-        versionedHrefs
-                .stream()
-                .max(Comparator.comparingLong(HREF::getVersion))
-                .ifPresent(
-                        actualRef -> {
-                            hrefs.add(actualRef);
-                            logger.info("Found actual version: '{}'", Printable.of(actualRef.path()));
-                            if (this.getOnExpires() != null) {
-                                Optional.of(versionedHrefs
-                                                .stream()
-                                                .filter(href -> href.getVersion() < actualRef.getVersion())
-                                                .map(HREF::getUri)
-                                                .distinct()
-                                                .collect(Collectors.toList()))
-                                        .filter(Predicate.not(Collection::isEmpty))
-                                        .ifPresent(this.getOnExpires());
-                            }
-                        });
-        return new Listing(hrefs, invalid);
+        HREF actual = versionedHrefs.stream().max(Comparator.comparingLong(HREF::getVersion)).orElse(null);
+        List<URI> expired = actual == null ? List.of() : versionedHrefs.stream()
+                .filter(href -> href.getVersion() < actual.getVersion())
+                .map(HREF::getUri)
+                .distinct()
+                .collect(Collectors.toList());
+        if (actual != null) {
+            logger.info("Found actual version: '{}'", Printable.of(actual.path()));
+        }
+        return new Listing(hrefs, actual, expired, invalid);
     }
 
     /**
@@ -266,13 +286,16 @@ public class TextHtmlProcessor implements Processor<CompletableFuture<Summary>> 
     }
 
     /**
-     * Resources of a listing to process and the number of its entries that cannot be parsed
+     * Resources of a listing: the resources to process, the actual version and the expired versions,
+     * and the number of the entries that cannot be parsed
      */
     @Getter
     @AllArgsConstructor(access = AccessLevel.PRIVATE)
     private static final class Listing {
 
         private final List<HREF> hrefs;
+        private final HREF actual;
+        private final List<URI> expired;
         private final long invalid;
 
     }
