@@ -1,7 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <settings xmlns="http://maven.apache.org/SETTINGS/1.2.0"
           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.2.0 http://maven.apache.org/xsd/settings-1.2.0.xsd">
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.2.0 https://maven.apache.org/xsd/settings-1.2.0.xsd">
+    <!--
+        Settings of the project, applied to every build by .mvn/maven.config (-s .mvn/settings.xml) instead of the user
+        settings: the dependencies and plugins come from Maven Central only, whatever repositories and mirrors the user
+        settings contain. No secrets in this file: the project publishes nothing.
+    -->
     <profiles>
         <profile>
             <id>default</id>

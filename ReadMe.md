@@ -15,16 +15,20 @@ or one of its folders, to a local folder.
 
 ## Requirements
 
-- JDK 11 and Maven 3.9 to build the tool and to start it with `run.sh`, or
+- JDK 11 to build the tool and to start it with `run.sh`: Maven 3.10.0 is downloaded by the Maven Wrapper, or
 - Docker with Compose.
 
 ## Build and test
 
 ```console
-mvn clean package
+./mvnw clean package
 ```
 
-builds `target/etsiorg-downloader-<version>-jar-with-dependencies.jar` and runs the tests; `mvn test` runs the tests only.
+builds `target/etsiorg-downloader-<version>-jar-with-dependencies.jar` and runs the tests; `./mvnw test` runs the tests only.
+
+The Maven Wrapper (`mvnw`, `mvnw.cmd` on Windows) downloads the Maven version of the project once, checks the SHA-256
+of its distribution and runs it. Run it in the project folder: `.mvn/maven.config` applies the project settings
+`.mvn/settings.xml` (Maven Central only) instead of the user settings.
 
 ## Run
 
@@ -68,7 +72,7 @@ A run can be interrupted at any moment: the next run resumes the unfinished down
 docker compose up --build
 ```
 
-The image is built from the sources (the tests run during the build) and runs the downloader as a non-root user
+The image is built from the sources with `./mvnw` (the tests run during the build) and runs the downloader as a non-root user
 (UID 10001) with a read-only file system; only `./deliver` is mounted, and the mirror is stored there. On Linux create
 the folder and make it writable for the user before the first start, e.g. `mkdir -p deliver && sudo chown 10001 deliver`.
 

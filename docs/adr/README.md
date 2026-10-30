@@ -15,3 +15,4 @@ and the decision is added to both indexes.
 | [0007](0007-summary-result.md) | Processing result — a Summary value instead of a stream of paths | [0007](ru/0007-summary-result.md) |
 | [0008](0008-error-isolation-exit-code.md) | Error isolation and the exit status | [0008](ru/0008-error-isolation-exit-code.md) |
 | [0009](0009-expire-after-actual-version.md) | Remove expired versions after the actual version has been processed successfully | [0009](ru/0009-expire-after-actual-version.md) |
+| [0010](0010-maven-wrapper.md) | Build with the Maven Wrapper and the project settings | [0010](ru/0010-maven-wrapper.md) |
