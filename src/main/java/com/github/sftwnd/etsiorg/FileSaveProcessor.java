@@ -8,7 +8,10 @@ import lombok.extern.slf4j.Slf4j;
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
+import java.nio.channels.OverlappingFileLockException;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
@@ -27,9 +30,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
-import static java.nio.file.StandardOpenOption.APPEND;
 import static java.nio.file.StandardOpenOption.CREATE;
-import static java.nio.file.StandardOpenOption.TRUNCATE_EXISTING;
 import static java.nio.file.StandardOpenOption.WRITE;
 
 /**
@@ -105,8 +106,7 @@ public class FileSaveProcessor implements Processor<CompletableFuture<Stream<Pat
         try {
             Files.createDirectories(filePath.getParent());
             long contentLength = this.getPage().contentLength();
-            if (!isUpToDate(filePath, contentLength)) {
-                download(filePath, contentLength);
+            if (!isUpToDate(filePath, contentLength) && download(filePath, contentLength)) {
                 logger.info("File: '{}' has been saved", Printable.of(filePath));
             }
             return filePath;
@@ -161,54 +161,113 @@ public class FileSaveProcessor implements Processor<CompletableFuture<Stream<Pat
     }
 
     /**
-     * Download the file to the {@code .part} file, resuming it if it exists, and replace the local copy with it
+     * Download the file to the locked {@code .part} file, resuming it if it exists, and replace the local copy with it.
+     * The lock is bound to the file itself, so it excludes other tasks writing the same file under another name
+     * (e.g. on a case-insensitive file system) and other processes mirroring to the same folder
      * @param filePath local path of the file
      * @param contentLength expected length of the file
+     * @return true if the file has been downloaded, false if it is being downloaded by another task or process
+     *         or has been downloaded meanwhile
      * @throws IOException in the case of error; the {@code .part} file is kept to be resumed later
      */
-    private void download(@NonNull Path filePath, long contentLength) throws IOException {
+    private boolean download(@NonNull Path filePath, long contentLength) throws IOException {
         Path partPath = partPath(filePath);
-        removeStaleParts(filePath, partPath);
-        long readed = partLength(partPath, contentLength);
-        if (readed > 0) {
-            logger.info("Continue loading from offset {} of the file: '{}'", readed, Printable.of(filePath));
-        }
-        try (OutputStream outputStream = Files.newOutputStream(partPath, WRITE, CREATE, readed == 0 ? TRUNCATE_EXISTING : APPEND)) {
-            byte[] buff = new byte[BUFFER_SIZE];
-            while (readed < contentLength) {
-                long offset = readed;
-                try (InputStream inputStream = this.getPage().inputStreamFrom(offset)) {
-                    long remoteLength = this.getPage().contentLength();
-                    if (remoteLength >= 0 && remoteLength != contentLength) {
-                        throw new ChangedFileException("File has " + remoteLength + " bytes on the site instead of " + contentLength + " from the listing");
-                    }
-                    int bufferOffset = 0;
-                    while (readed < contentLength) {
-                        int bytes = read(inputStream, buff, bufferOffset, readed, contentLength);
-                        if (bytes < 0) {
-                            if (bufferOffset > 0) {
-                                outputStream.write(buff, 0, bufferOffset);
-                            }
-                            break;
-                        }
-                        bufferOffset += bytes;
-                        readed += bytes;
-                        if (bufferOffset == buff.length || readed == contentLength) {
-                            outputStream.write(buff, 0, bufferOffset);
-                            bufferOffset = 0;
-                        }
-                    }
-                }
-                if (readed == offset) {
-                    throw new EOFException("No data has been received from offset " + offset);
-                }
+        boolean upToDate;
+        try (FileChannel channel = FileChannel.open(partPath, CREATE, WRITE); FileLock lock = tryLock(channel)) {
+            if (lock == null) {
+                logger.warn("File: '{}' is being downloaded by another task or process", Printable.of(filePath));
+                return false;
+            }
+            upToDate = isUpToDate(filePath, contentLength);
+            if (!upToDate) {
+                removeStaleParts(filePath, partPath);
+                transfer(channel, filePath, contentLength);
             }
         } catch (ChangedFileException cfex) {
             Files.deleteIfExists(partPath);
             throw cfex;
         }
+        if (upToDate) {
+            Files.deleteIfExists(partPath);
+            return false;
+        }
         syncFileTime(partPath, false);
         replace(partPath, filePath);
+        return true;
+    }
+
+    /**
+     * Transfer the file to the {@code .part} file from its current length
+     * @param channel locked channel of the {@code .part} file
+     * @param filePath local path of the file
+     * @param contentLength expected length of the file
+     * @throws IOException in the case of error
+     */
+    private void transfer(@NonNull FileChannel channel, @NonNull Path filePath, long contentLength) throws IOException {
+        long readed = channel.size();
+        if (readed > contentLength) {
+            logger.warn("Downloaded part of the file: '{}' is longer than the file and is discarded", Printable.of(filePath));
+            readed = 0L;
+        } else if (readed > 0) {
+            logger.info("Continue loading from offset {} of the file: '{}'", readed, Printable.of(filePath));
+        }
+        channel.truncate(readed);
+        channel.position(readed);
+        byte[] buff = new byte[BUFFER_SIZE];
+        while (readed < contentLength) {
+            long offset = readed;
+            try (InputStream inputStream = this.getPage().inputStreamFrom(offset)) {
+                long remoteLength = this.getPage().contentLength();
+                if (remoteLength >= 0 && remoteLength != contentLength) {
+                    throw new ChangedFileException("File has " + remoteLength + " bytes on the site instead of " + contentLength + " from the listing");
+                }
+                int bufferOffset = 0;
+                while (readed < contentLength) {
+                    int bytes = read(inputStream, buff, bufferOffset, readed, contentLength);
+                    if (bytes < 0) {
+                        write(channel, buff, bufferOffset);
+                        break;
+                    }
+                    bufferOffset += bytes;
+                    readed += bytes;
+                    if (bufferOffset == buff.length || readed == contentLength) {
+                        write(channel, buff, bufferOffset);
+                        bufferOffset = 0;
+                    }
+                }
+            }
+            if (readed == offset) {
+                throw new EOFException("No data has been received from offset " + offset);
+            }
+        }
+    }
+
+    /**
+     * Lock the whole file of the channel without waiting
+     * @param channel channel of the file
+     * @return lock or null if the file is locked by this or another process
+     * @throws IOException in the case of error
+     */
+    private static @Nullable FileLock tryLock(@NonNull FileChannel channel) throws IOException {
+        try {
+            return channel.tryLock();
+        } catch (OverlappingFileLockException oflex) {
+            return null;
+        }
+    }
+
+    /**
+     * Write the bytes of the buffer to the channel
+     * @param channel channel to write to
+     * @param buff buffer
+     * @param length number of the bytes from the beginning of the buffer
+     * @throws IOException in the case of error
+     */
+    private static void write(@NonNull FileChannel channel, @NonNull byte[] buff, int length) throws IOException {
+        ByteBuffer buffer = ByteBuffer.wrap(buff, 0, length);
+        for (int written = 0; written < length; ) {
+            written += channel.write(buffer);
+        }
     }
 
     /**
@@ -240,26 +299,6 @@ public class FileSaveProcessor implements Processor<CompletableFuture<Stream<Pat
                 logger.info("Part of another version of the file has been removed: '{}'", Printable.of(stale));
             }
         }
-    }
-
-    /**
-     * Length of the downloaded part of the file
-     * @param partPath path of the {@code .part} file
-     * @param contentLength expected length of the file
-     * @return length of the part to resume from or 0 if there is no part or it is longer than the file and is removed
-     * @throws IOException if the part cannot be read or removed
-     */
-    private static long partLength(@NonNull Path partPath, long contentLength) throws IOException {
-        if (!Files.isRegularFile(partPath, LinkOption.NOFOLLOW_LINKS)) {
-            return 0L;
-        }
-        long partLength = Files.size(partPath);
-        if (partLength > contentLength) {
-            logger.warn("Downloaded part: '{}' is longer than the file and is removed", Printable.of(partPath));
-            Files.delete(partPath);
-            return 0L;
-        }
-        return partLength;
     }
 
     /**

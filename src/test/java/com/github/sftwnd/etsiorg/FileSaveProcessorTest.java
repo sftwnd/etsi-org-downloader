@@ -11,13 +11,19 @@ import java.io.InputStream;
 import java.net.SocketTimeoutException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.FileTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
@@ -27,6 +33,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -165,6 +172,47 @@ class FileSaveProcessorTest extends AbstractFileSourceTest {
         when(this.page.inputStreamFrom(0L)).thenReturn(new ByteArrayInputStream(this.buff));
         assertEquals(List.of(this.target), process());
         assertArrayEquals(content(), Files.readAllBytes(this.target));
+    }
+
+    @Test
+    void lockedPartIsSkippedTest() throws IOException {
+        byte[] partial = Arrays.copyOf(this.buff, length() / 2);
+        Files.createDirectories(this.part.getParent());
+        Files.write(this.part, partial);
+        clearInvocations(this.page);
+        try (FileChannel channel = FileChannel.open(this.part, StandardOpenOption.WRITE); FileLock ignored = channel.lock()) {
+            assertEquals(List.of(this.target), process());
+        }
+        assertTrue(Files.notExists(this.target));
+        assertArrayEquals(partial, Files.readAllBytes(this.part));
+        verify(this.page, never()).inputStreamFrom(anyLong());
+    }
+
+    @Test
+    void concurrentDownloadOfSameFileTest() throws Exception {
+        CountDownLatch started = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        when(this.page.inputStreamFrom(0L)).thenReturn(new ByteArrayInputStream(this.buff, 0, length()) {
+            @Override
+            public synchronized int read(byte[] target, int offset, int length) {
+                started.countDown();
+                try {
+                    release.await(10, TimeUnit.SECONDS);
+                } catch (InterruptedException iex) {
+                    Thread.currentThread().interrupt();
+                }
+                return super.read(target, offset, length);
+            }
+        });
+        CompletableFuture<List<Path>> first = CompletableFuture.supplyAsync(this::process);
+        assertTrue(started.await(10, TimeUnit.SECONDS));
+        Page second = spy(Page.of(this.href));
+        new FileSaveProcessor(new Destination(root()), ZoneOffset.UTC, second).process().join();
+        verify(second, never()).inputStreamFrom(anyLong());
+        release.countDown();
+        assertEquals(List.of(this.target), first.get(10, TimeUnit.SECONDS));
+        assertArrayEquals(content(), Files.readAllBytes(this.target));
+        assertTrue(Files.notExists(this.part));
     }
 
     @Test
