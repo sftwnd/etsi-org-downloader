@@ -39,5 +39,6 @@ for argument in "$@"; do
   esac
 done
 # ${array[@]+...} expands an empty array under set -u in bash 3.2 of macOS as well
-exec "${JAVA_CMD}" -Dlogback.configurationFile="${LOGBACK_FILE}" ${JVM_OPTIONS[@]+"${JVM_OPTIONS[@]}"} \
-     -jar "${ETSI_ORG_JAR}" ${ARGUMENTS[@]+"${ARGUMENTS[@]}"}
+# An OutOfMemoryError ends the run with the status 3 instead of leaving the JVM in an undefined state
+exec "${JAVA_CMD}" -XX:+ExitOnOutOfMemoryError -Dlogback.configurationFile="${LOGBACK_FILE}" \
+     ${JVM_OPTIONS[@]+"${JVM_OPTIONS[@]}"} -jar "${ETSI_ORG_JAR}" ${ARGUMENTS[@]+"${ARGUMENTS[@]}"}

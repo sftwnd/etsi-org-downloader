@@ -27,4 +27,6 @@ ENV NO_COLOR=1 \
 COPY --from=build /build/target/etsiorg-downloader-*-jar-with-dependencies.jar etsiorg-downloader.jar
 COPY src/main/resources/logback.xml logback.xml
 USER etsiorg
-ENTRYPOINT ["java", "-Dlogback.configurationFile=/opt/etsiorg/logback.xml", "-jar", "/opt/etsiorg/etsiorg-downloader.jar"]
+# The heap is a share of the memory limit of the container, and an OutOfMemoryError ends the run with the status 3
+ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75", "-XX:+ExitOnOutOfMemoryError", \
+            "-Dlogback.configurationFile=/opt/etsiorg/logback.xml", "-jar", "/opt/etsiorg/etsiorg-downloader.jar"]

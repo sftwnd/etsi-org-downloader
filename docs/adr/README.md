@@ -21,3 +21,4 @@ and the decision is added to both indexes.
 | [0013](0013-settings-sources.md) | Settings — a system property, otherwise an environment variable, otherwise the default | [0013](ru/0013-settings-sources.md) |
 | [0014](0014-run-lock.md) | One run at a time per destination folder | [0014](ru/0014-run-lock.md) |
 | [0015](0015-dry-run.md) | Dry run — the crawl of a run with a plan instead of downloads and removals | [0015](ru/0015-dry-run.md) |
+| [0016](0016-resource-limits.md) | Bounded resources — limits of the container, the heap as their share, an exit on OutOfMemoryError | [0016](ru/0016-resource-limits.md) |

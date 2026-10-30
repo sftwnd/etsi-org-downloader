@@ -39,9 +39,15 @@ public class Main {
     static final int INVALID_CONFIGURATION = 2;
 
     /**
+     * Exit status of the JVM on an {@code OutOfMemoryError} with {@code -XX:+ExitOnOutOfMemoryError}, which {@code run.sh}
+     * and the image set: no run returns it itself
+     */
+    static final int OUT_OF_MEMORY = 3;
+
+    /**
      * Exit status of a run that has not started because another run mirrors to the destination folder
      */
-    static final int LOCKED = 3;
+    static final int LOCKED = 4;
 
     public static void main(String[] args) {
         System.exit(run(args, System::getProperty, System::getenv));
@@ -189,8 +195,8 @@ public class Main {
                 + Settings.help() + lineSeparator
                 + lineSeparator
                 + "Exit status: " + SUCCESS + " - no failures, " + FAILURE + " - some resources have failed, "
-                + INVALID_CONFIGURATION + " - invalid configuration, " + LOCKED + " - another run mirrors to the destination folder"
-                + lineSeparator;
+                + INVALID_CONFIGURATION + " - invalid configuration, " + OUT_OF_MEMORY + " - out of memory, "
+                + LOCKED + " - another run mirrors to the destination folder" + lineSeparator;
     }
 
 }
