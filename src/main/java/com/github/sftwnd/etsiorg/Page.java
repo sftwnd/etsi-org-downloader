@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InterruptedIOException;
 import java.net.HttpURLConnection;
+import java.net.ProtocolException;
 import java.net.URI;
 import java.net.URL;
 import java.nio.charset.Charset;
@@ -37,6 +38,11 @@ public class Page {
      * Charset parameter of the Content-Type header
      */
     private static final Pattern CHARSET = Pattern.compile(";\\s*charset\\s*=\\s*\"?([^\";\\s]+)", Pattern.CASE_INSENSITIVE);
+
+    /**
+     * Content-Range header of a partial response: first byte and total length
+     */
+    private static final Pattern CONTENT_RANGE = Pattern.compile("\\s*bytes\\s+(\\d{1,18})-\\d{1,18}/(\\d{1,18}|\\*)\\s*", Pattern.CASE_INSENSITIVE);
 
     /**
      * Seconds of the Retry-After header
@@ -99,7 +105,8 @@ public class Page {
     private boolean acceptRange = true;
 
     /**
-     * Size of file resource if defined in HREF or contentLength from HTTP Connection
+     * Size of file resource: the length reported by the server once the page is connected, the size from the listing
+     * before that
      * @return file resource size or -1 if the server does not report it
      * @throws IOException in the case of error
      */
@@ -176,7 +183,8 @@ public class Page {
     /**
      * Make HttpURLConnection if is not connected or reconnect from the positive offset.
      * Network errors and 408, 429, 5xx responses are retried according to the settings.
-     * The bytes before the offset are skipped if the server ignores the Range request
+     * The bytes before the offset are skipped if the server ignores the Range request; a partial response has to start
+     * at the offset
      * @param offset position in the resource to read from
      * @throws IOException if the connection cannot be established
      */
@@ -252,7 +260,11 @@ public class Page {
                 }
                 this.contentLength = length;
             } else if (responseCode == HttpURLConnection.HTTP_PARTIAL) {
+                long length = rangeLength(httpConnection, offset);
                 stream = httpConnection.getInputStream();
+                if (length >= 0) {
+                    this.contentLength = length;
+                }
             } else {
                 throw new HttpStatusException(responseCode, retryAfter(httpConnection).orElse(null),
                         "Unable to open HTTP connection: " + Printable.of(httpConnection.getHeaderField(0)));
@@ -274,7 +286,7 @@ public class Page {
      * @return delay before the next attempt or null if the failure is final
      */
     private @Nullable Duration retryDelay(@NonNull IOException ioex, int attempt) {
-        if (attempt >= this.settings.getAttempts()) {
+        if (attempt >= this.settings.getAttempts() || ioex instanceof ProtocolException) {
             return null;
         }
         Duration backoff = this.settings.getRetryDelay().multipliedBy(1L << Math.min(attempt - 1, 16));
@@ -289,6 +301,22 @@ public class Page {
                     .orElse(backoff);
         }
         return backoff;
+    }
+
+    /**
+     * Total length of the resource from the Content-Range header of a partial response
+     * @param httpConnection connection with the partial response
+     * @param offset requested offset
+     * @return total length of the resource or -1 if the server does not report it
+     * @throws ProtocolException if the header is missing or the range does not start at the offset
+     */
+    private static long rangeLength(@NonNull HttpURLConnection httpConnection, long offset) throws ProtocolException {
+        String contentRange = httpConnection.getHeaderField("Content-Range");
+        Matcher matcher = CONTENT_RANGE.matcher(String.valueOf(contentRange));
+        if (!matcher.matches() || Long.parseLong(matcher.group(1)) != offset) {
+            throw new ProtocolException("Partial response does not start at " + offset + ": Content-Range " + Printable.of(contentRange));
+        }
+        return "*".equals(matcher.group(2)) ? -1L : Long.parseLong(matcher.group(2));
     }
 
     /**
