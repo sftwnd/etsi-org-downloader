@@ -2,8 +2,8 @@
 
 - Статус: Принято
 - Дата: 2026-10-30
-- Изменено: 2026-10-30 — по умолчанию 4 потока вместо числа процессоров (#57); `Settings` на диаграмме компонентов
-  (#61)
+- Изменено: 2026-10-30 — по умолчанию 4 потока вместо числа процессоров (#57); `Settings` и `RunLock` на диаграмме
+  компонентов (#61, #62)
 - Версия на английском: [ADR-0004](../0004-bounded-executor.md)
 
 ## Контекст
@@ -67,10 +67,12 @@ C4Component
         Component(page, "Page", "Java", "HTTP: таймауты, повторы, Range")
         Component(dest, "Destination", "Java", "URI в путь внутри папки назначения")
         Component(remover, "ExpiredRemover", "Java", "Удаление устаревших версий")
+        Component(lock, "RunLock", "Java", "Один прогон одновременно на папку назначения")
     }
     ContainerDb(fs, "Папка назначения", "Файловая система", "Зеркало deliver/...")
     Rel(user, main, "Запускает")
     Rel(main, settings, "Настройки прогона")
+    Rel(main, lock, "Держит, пока идёт прогон")
     Rel(main, factory, "Корень обхода")
     Rel(factory, html, "Папка")
     Rel(factory, file, "Файл")
@@ -84,4 +86,5 @@ C4Component
     Rel(remover, dest, "Путь версии")
     Rel(file, fs, "Пишет")
     Rel(remover, fs, "Удаляет")
+    Rel(lock, fs, "Блокирует .etsiorg-downloader.lock")
 ```

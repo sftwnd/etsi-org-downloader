@@ -106,6 +106,23 @@ class MainTest {
         }
     }
 
+    @Test
+    @SuppressWarnings("try")
+    void lockedTest() throws Exception {
+        AtomicInteger fileRequests = new AtomicInteger();
+        HttpServer server = server(true, fileRequests);
+        try {
+            try (RunLock ignored = RunLock.tryAcquire(this.tempDir.resolve(".etsiorg-downloader.lock")).orElseThrow()) {
+                assertEquals(Main.LOCKED, run(properties(server), Map.of()));
+                assertEquals(0, this.requests.get());
+            }
+            assertEquals(Main.SUCCESS, run(properties(server), Map.of()));
+            assertEquals(2, fileRequests.get());
+        } finally {
+            server.stop(0);
+        }
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"-h", "--help"})
     void helpTest(String argument) {
@@ -117,7 +134,8 @@ class MainTest {
         String help = Main.help();
         assertTrue(help.startsWith("Usage: etsiorg-downloader [-h | --help]"), help);
         assertTrue(help.contains(Settings.help()), help);
-        assertTrue(help.contains("0 - no failures, 1 - some resources have failed, 2 - invalid configuration"), help);
+        assertTrue(help.contains("0 - no failures, 1 - some resources have failed, 2 - invalid configuration, "
+                + "3 - another run mirrors to the destination folder"), help);
     }
 
     @ParameterizedTest

@@ -84,14 +84,16 @@ java -Dlogback.configurationFile=src/main/resources/logback.xml -Duri=https://ww
      --module-path target/etsiorg-downloader-<version>.jar:target/lib --module com.github.sftwnd.etsiorg
 ```
 
-A run can be interrupted at any moment: the next run resumes the unfinished downloads. It ends with the summary
-`Files downloaded: N, up to date: M, failed: K` and the exit status:
+A run can be interrupted at any moment: the next run resumes the unfinished downloads. One run at a time mirrors to
+a destination folder: it holds a lock of the operating system on the file `.etsiorg-downloader.lock` there, which stays
+in the folder. A run ends with the summary `Files downloaded: N, up to date: M, failed: K` and the exit status:
 
 | Status | Meaning                                                                                                                                                             |
 |--------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `0`    | no failures                                                                                                                                                         |
 | `1`    | some resources have failed; a repeated run does not download the already downloaded files                                                                           |
 | `2`    | invalid configuration, found before the first request: an invalid setting, an argument other than `-h` and `--help`, or a destination folder that cannot be written |
+| `3`    | another run mirrors to the destination folder; nothing has been done                                                                                                |
 
 ## Docker
 

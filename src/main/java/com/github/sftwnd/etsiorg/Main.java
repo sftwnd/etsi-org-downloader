@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -33,6 +34,11 @@ public class Main {
      */
     static final int INVALID_CONFIGURATION = 2;
 
+    /**
+     * Exit status of a run that has not started because another run mirrors to the destination folder
+     */
+    static final int LOCKED = 3;
+
     public static void main(String[] args) {
         System.exit(run(args, System::getProperty, System::getenv));
     }
@@ -43,8 +49,10 @@ public class Main {
      * @param args command line arguments: none, or {@code --help}
      * @param properties value of a system property by its name
      * @param environment value of an environment variable by its name
-     * @return exit status: {@link #SUCCESS}, {@link #FAILURE} or {@link #INVALID_CONFIGURATION}
+     * @return exit status: {@link #SUCCESS}, {@link #FAILURE}, {@link #INVALID_CONFIGURATION} or {@link #LOCKED}
      */
+    // the lock is held while the run lasts and is not referenced
+    @SuppressWarnings("try")
     static int run(@NonNull String[] args, @NonNull UnaryOperator<String> properties, @NonNull UnaryOperator<String> environment) {
         Objects.requireNonNull(args, "Main::run - args is null");
         if (args.length == 1 && HELP.contains(args[0])) {
@@ -66,14 +74,23 @@ public class Main {
             logger.error("Invalid configuration: {}", Printable.of(exception.getMessage()));
             return INVALID_CONFIGURATION;
         }
+        Optional<RunLock> lock;
         try {
             destination.prepare();
+            lock = RunLock.tryAcquire(destination.getLockFile());
         } catch (IOException ioex) {
             logger.error("Invalid configuration: destination folder '{}' cannot be written. Cause: {} {}",
                     Printable.of(destination.getRoot()), ioex.getClass().getSimpleName(), Printable.of(ioex.getMessage()));
             return INVALID_CONFIGURATION;
         }
-        return mirror(settings, linkPolicy, destination);
+        if (lock.isEmpty()) {
+            logger.error("Another run is mirroring to '{}': '{}' is locked",
+                    Printable.of(destination.getRoot()), Printable.of(destination.getLockFile()));
+            return LOCKED;
+        }
+        try (RunLock ignored = lock.get()) {
+            return mirror(settings, linkPolicy, destination);
+        }
     }
 
     /**
@@ -117,7 +134,8 @@ public class Main {
                 + Settings.help() + lineSeparator
                 + lineSeparator
                 + "Exit status: " + SUCCESS + " - no failures, " + FAILURE + " - some resources have failed, "
-                + INVALID_CONFIGURATION + " - invalid configuration" + lineSeparator;
+                + INVALID_CONFIGURATION + " - invalid configuration, " + LOCKED + " - another run mirrors to the destination folder"
+                + lineSeparator;
     }
 
 }

@@ -1,6 +1,7 @@
 package com.github.sftwnd.etsiorg;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
 import java.io.IOException;
@@ -76,6 +77,17 @@ class ModulePathIT {
     void environmentVariableTest() throws IOException, InterruptedException {
         String output = start(Main.INVALID_CONFIGURATION, Map.of("ETSIORG_URI", INVALID_URI), "-jar", path("etsiorg.fatJar").toString());
         assertTrue(output.contains("Invalid configuration: Only http and https are supported: " + INVALID_URI), output);
+    }
+
+    @Test
+    @SuppressWarnings("try")
+    void anotherProcessTest(@TempDir Path dest) throws IOException, InterruptedException {
+        try (RunLock ignored = RunLock.tryAcquire(dest.resolve(".etsiorg-downloader.lock")).orElseThrow()) {
+            // a closed port: if the lock did not stop the run, it would fail at once instead of crawling a site
+            String output = start(Main.LOCKED, Map.of(), "-Duri=http://127.0.0.1:1/deliver/", "-Ddest=" + dest,
+                    "-jar", path("etsiorg.fatJar").toString());
+            assertTrue(output.contains("Another run is mirroring to '" + dest.toAbsolutePath().normalize() + "'"), output);
+        }
     }
 
     @Test
