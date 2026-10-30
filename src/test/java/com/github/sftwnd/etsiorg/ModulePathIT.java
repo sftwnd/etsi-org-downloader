@@ -95,6 +95,14 @@ class ModulePathIT {
         String output = start(Main.SUCCESS, Map.of(), "-jar", path("etsiorg.fatJar").toString(), "--help");
         assertTrue(output.startsWith("Usage: etsiorg-downloader"), output);
         assertTrue(output.contains("ETSIORG_URI"), output);
+        assertTrue(output.contains("etsiorg-downloader " + System.getProperty("etsiorg.version") + " mirrors"), output);
+    }
+
+    @Test
+    void versionOnModulePathTest() throws IOException, InterruptedException {
+        String output = start(Main.SUCCESS, Map.of(), "--module-path", path("etsiorg.moduleJar") + File.pathSeparator + path("etsiorg.modulePath"),
+                "--module", MODULE, "--help");
+        assertTrue(output.contains("etsiorg-downloader " + System.getProperty("etsiorg.version") + " mirrors"), output);
     }
 
     /**

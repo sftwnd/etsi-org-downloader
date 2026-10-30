@@ -4,7 +4,8 @@ services:
     container_name: "etsiorg-downloader"
     build:
       context: ./
-    image: sftwnd/etsi-org:1.0
+    # the image of the sources at hand; the downloader logs its version at the start
+    image: sftwnd/etsiorg-downloader
     hostname: etsiorg-downloader
     environment:
       # the settings of the downloader, if they are set in the environment of docker compose or in .env
