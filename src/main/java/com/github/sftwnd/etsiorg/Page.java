@@ -16,10 +16,6 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.Duration;
-import java.time.Instant;
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
-import java.time.temporal.ChronoUnit;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Predicate;
@@ -101,18 +97,6 @@ public class Page {
      * Accept range flag
      */
     private boolean acceptRange = true;
-
-    /**
-     * Request resource creation date
-     * @return date of resource creation
-     */
-    public Instant dateTime() {
-        return Optional.ofNullable(href.getDateTime())
-                .map(dateTime -> dateTime.atZone(ZoneId.systemDefault()))
-                .map(ZonedDateTime::toInstant)
-                .map(instant -> instant.truncatedTo(ChronoUnit.SECONDS))
-                .orElse(null);
-    }
 
     /**
      * Size of file resource if defined in HREF or contentLength from HTTP Connection

@@ -12,6 +12,8 @@ import java.net.SocketTimeoutException;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -64,6 +66,20 @@ class FileSaveProcessorTest extends AbstractFileSourceTest {
         Path path = this.fileSaveProcessor.process().join().findFirst().orElse(null);
         assertNotNull(path);
         assertArrayEquals(Arrays.copyOf(this.buff, fileSize), Files.readAllBytes(path));
+    }
+
+    @Test
+    void listingTimeIsUtcTest() throws IOException {
+        Path path = this.fileSaveProcessor.process().join().findFirst().orElseThrow();
+        assertEquals(this.dateTime.toInstant(ZoneOffset.UTC), Files.getLastModifiedTime(path).toInstant());
+    }
+
+    @Test
+    void listingTimeZoneTest() throws IOException {
+        ZoneId zone = ZoneId.of("Europe/Moscow");
+        when(this.fileSaveProcessor.getZone()).thenReturn(zone);
+        Path path = this.fileSaveProcessor.process().join().findFirst().orElseThrow();
+        assertEquals(this.dateTime.atZone(zone).toInstant(), Files.getLastModifiedTime(path).toInstant());
     }
 
     @Test
@@ -145,6 +161,7 @@ class FileSaveProcessorTest extends AbstractFileSourceTest {
         this.fileSaveProcessor = mock(FileSaveProcessor.class);
         when(this.fileSaveProcessor.getPage()).thenReturn(this.page);
         when(this.fileSaveProcessor.getDestination()).thenReturn(new Destination(root()));
+        when(this.fileSaveProcessor.getZone()).thenReturn(ZoneOffset.UTC);
         when(this.fileSaveProcessor.process()).thenCallRealMethod();
     }
 

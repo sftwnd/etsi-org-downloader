@@ -22,10 +22,7 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.Duration;
-import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
@@ -62,14 +59,6 @@ class PageTest {
     @Test
     void ofNonNullHrefTest() {
         assertSame(this.href, this.page().getHref());
-    }
-
-    @Test
-    void dateTimeTest() {
-        LocalDateTime dateTime = LocalDateTime.now().truncatedTo(ChronoUnit.SECONDS).minusHours(1);
-        when(href.getDateTime()).thenReturn(dateTime);
-        Instant checkInstant = dateTime.atZone(ZoneId.systemDefault()).toInstant();
-        assertEquals(checkInstant, this.page().dateTime());
     }
 
     @Test
