@@ -13,6 +13,7 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.ProtocolException;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
@@ -186,6 +187,56 @@ class PageTest {
     }
 
     @Test
+    void partialResponseLengthTest() throws Exception {
+        assertPartialResponse("bytes 12-35/36", 1, page -> {
+            try (InputStream inputStream = page.inputStreamFrom(12)) {
+                assertArrayEquals(Arrays.copyOfRange(CONTENT, 12, CONTENT.length), inputStream.readAllBytes());
+            }
+            assertEquals(CONTENT.length, page.contentLength());
+        });
+    }
+
+    @Test
+    void partialResponseUnknownLengthTest() throws Exception {
+        assertPartialResponse("bytes 12-35/*", 1, page -> {
+            page.inputStreamFrom(12).close();
+            assertEquals(CONTENT.length, page.contentLength());
+        });
+    }
+
+    @Test
+    void partialResponseFromAnotherOffsetTest() throws Exception {
+        assertPartialResponse("bytes 0-23/36", 1, page -> assertThrows(ProtocolException.class, () -> page.inputStreamFrom(12)));
+    }
+
+    @Test
+    void partialResponseWithoutRangeTest() throws Exception {
+        assertPartialResponse(null, 1, page -> assertThrows(ProtocolException.class, () -> page.inputStreamFrom(12)));
+    }
+
+    private void assertPartialResponse(String contentRange, int expectedRequests, PageAssertion assertion) throws Exception {
+        AtomicInteger requests = new AtomicInteger();
+        HttpServer server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+        server.createContext("/", exchange -> {
+            requests.incrementAndGet();
+            if (contentRange != null) {
+                exchange.getResponseHeaders().add("Content-Range", contentRange);
+            }
+            exchange.sendResponseHeaders(HttpURLConnection.HTTP_PARTIAL, CONTENT.length - 12);
+            try (OutputStream outputStream = exchange.getResponseBody()) {
+                outputStream.write(CONTENT, 12, CONTENT.length - 12);
+            }
+        });
+        server.start();
+        try {
+            assertion.accept(Page.of(href(uri(server.getAddress().getPort())), SETTINGS));
+            assertEquals(expectedRequests, requests.get());
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
     void charsetTest() throws Exception {
         assertEquals(Charset.forName("windows-1251"), charsetOf("text/html; charset=windows-1251"));
         assertEquals(StandardCharsets.ISO_8859_1, charsetOf("text/html;Charset=\"ISO-8859-1\""));
@@ -310,6 +361,9 @@ class PageTest {
             String range = exchange.getRequestHeaders().getFirst("Range");
             ranges.add(String.valueOf(range));
             int from = acceptRanges && range != null ? offset : 0;
+            if (from > 0) {
+                exchange.getResponseHeaders().add("Content-Range", "bytes " + from + "-" + (content.length - 1) + "/" + content.length);
+            }
             exchange.sendResponseHeaders(from > 0 ? HttpURLConnection.HTTP_PARTIAL : HttpURLConnection.HTTP_OK, content.length - from);
             try (OutputStream outputStream = exchange.getResponseBody()) {
                 outputStream.write(content, from, content.length - from);

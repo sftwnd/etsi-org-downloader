@@ -10,18 +10,21 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.FileTime;
+import java.time.Duration;
 import java.time.Instant;
-import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import static java.nio.file.StandardOpenOption.APPEND;
@@ -30,8 +33,8 @@ import static java.nio.file.StandardOpenOption.TRUNCATE_EXISTING;
 import static java.nio.file.StandardOpenOption.WRITE;
 
 /**
- * Saves a file of the site to the destination folder. The file is downloaded to a sibling {@code .part} file,
- * which is resumed after an interruption and replaces the local copy only when it is complete
+ * Saves a file of the site to the destination folder. The file is downloaded to a sibling {@code .part} file bound to
+ * the listing time of the file, which is resumed after an interruption and replaces the local copy only when it is complete
  */
 @Getter
 @Slf4j
@@ -43,6 +46,23 @@ public class FileSaveProcessor implements Processor<CompletableFuture<Stream<Pat
      * Suffix of the file that is being downloaded
      */
     static final String PART_SUFFIX = ".part";
+
+    /**
+     * Listing time in the name of the {@code .part} file: a part of another version of the file is never resumed
+     */
+    static final DateTimeFormatter PART_STAMP = DateTimeFormatter.ofPattern("yyyyMMddHHmm");
+
+    /**
+     * Stamp of the listing time in the name of a {@code .part} file
+     */
+    private static final Pattern PART_STAMP_PATTERN = Pattern.compile("\\.\\d{12}" + Pattern.quote(PART_SUFFIX));
+
+    /**
+     * Largest difference between two time zones: a difference of the file time up to it in whole quarters of an hour
+     * is a shift of the time zone, not a change of the file
+     */
+    private static final Duration MAX_ZONE_SHIFT = Duration.ofHours(26);
+    private static final Duration ZONE_SHIFT_STEP = Duration.ofMinutes(15);
 
     private final Destination destination;
     private final ZoneId zone;
@@ -97,10 +117,11 @@ public class FileSaveProcessor implements Processor<CompletableFuture<Stream<Pat
     }
 
     /**
-     * Check the local copy of the file; the time of an up to date copy is synchronized with the listing
+     * Check the local copy of the file: it is up to date if it has the size and the time from the listing.
+     * A time that differs by a shift of the time zone is reset to the listing time
      * @param filePath local path of the file
      * @param contentLength expected length of the file
-     * @return true if the local copy has the expected length, false if it is missing or has to be downloaded again
+     * @return true if the local copy is up to date, false if it is missing or has to be downloaded again
      * @throws IOException if the path is occupied by something else than a regular file
      */
     private boolean isUpToDate(@NonNull Path filePath, long contentLength) throws IOException {
@@ -115,9 +136,28 @@ public class FileSaveProcessor implements Processor<CompletableFuture<Stream<Pat
             logger.warn("File: '{}' has size {} instead of {} and will be downloaded again", Printable.of(filePath), fileSize, contentLength);
             return false;
         }
+        Instant listingTime = listingTime();
+        if (listingTime != null) {
+            Instant fileTime = Files.getLastModifiedTime(filePath).toInstant().truncatedTo(ChronoUnit.SECONDS);
+            Duration difference = Duration.between(fileTime, listingTime);
+            if (!difference.isZero() && !isZoneShift(difference)) {
+                logger.warn("File: '{}' has time {} instead of {} and will be downloaded again", Printable.of(filePath), fileTime, listingTime);
+                return false;
+            }
+        }
         logger.debug("File: '{}' already exists.", Printable.of(filePath));
         syncFileTime(filePath, true);
         return true;
+    }
+
+    /**
+     * Check that the difference of the file time is a shift of the time zone the listing time was interpreted in
+     * @param difference non-zero difference of the file time and the listing time
+     * @return true for a difference up to {@link #MAX_ZONE_SHIFT} in whole quarters of an hour
+     */
+    private static boolean isZoneShift(@NonNull Duration difference) {
+        Duration shift = difference.abs();
+        return shift.compareTo(MAX_ZONE_SHIFT) <= 0 && shift.toSeconds() % ZONE_SHIFT_STEP.toSeconds() == 0;
     }
 
     /**
@@ -127,7 +167,8 @@ public class FileSaveProcessor implements Processor<CompletableFuture<Stream<Pat
      * @throws IOException in the case of error; the {@code .part} file is kept to be resumed later
      */
     private void download(@NonNull Path filePath, long contentLength) throws IOException {
-        Path partPath = filePath.resolveSibling(filePath.getFileName() + PART_SUFFIX);
+        Path partPath = partPath(filePath);
+        removeStaleParts(filePath, partPath);
         long readed = partLength(partPath, contentLength);
         if (readed > 0) {
             logger.info("Continue loading from offset {} of the file: '{}'", readed, Printable.of(filePath));
@@ -137,6 +178,10 @@ public class FileSaveProcessor implements Processor<CompletableFuture<Stream<Pat
             while (readed < contentLength) {
                 long offset = readed;
                 try (InputStream inputStream = this.getPage().inputStreamFrom(offset)) {
+                    long remoteLength = this.getPage().contentLength();
+                    if (remoteLength >= 0 && remoteLength != contentLength) {
+                        throw new ChangedFileException("File has " + remoteLength + " bytes on the site instead of " + contentLength + " from the listing");
+                    }
                     int bufferOffset = 0;
                     while (readed < contentLength) {
                         int bytes = read(inputStream, buff, bufferOffset, readed, contentLength);
@@ -158,9 +203,43 @@ public class FileSaveProcessor implements Processor<CompletableFuture<Stream<Pat
                     throw new EOFException("No data has been received from offset " + offset);
                 }
             }
+        } catch (ChangedFileException cfex) {
+            Files.deleteIfExists(partPath);
+            throw cfex;
         }
         syncFileTime(partPath, false);
         replace(partPath, filePath);
+    }
+
+    /**
+     * Path of the {@code .part} file bound to the listing time of the file
+     * @param filePath local path of the file
+     * @return path of the {@code .part} file
+     */
+    private @NonNull Path partPath(@NonNull Path filePath) {
+        String stamp = Optional.ofNullable(this.getPage().getHref().getDateTime()).map(PART_STAMP::format).orElse("000000000000");
+        return filePath.resolveSibling(filePath.getFileName() + "." + stamp + PART_SUFFIX);
+    }
+
+    /**
+     * Remove the {@code .part} files of the other versions of the file
+     * @param filePath local path of the file
+     * @param partPath {@code .part} file of the current version
+     * @throws IOException if the folder cannot be listed or a stale part cannot be removed
+     */
+    private static void removeStaleParts(@NonNull Path filePath, @NonNull Path partPath) throws IOException {
+        String prefix = filePath.getFileName().toString();
+        DirectoryStream.Filter<Path> stalePart = path -> {
+            String name = path.getFileName().toString();
+            return !path.equals(partPath) && name.startsWith(prefix)
+                    && PART_STAMP_PATTERN.matcher(name.substring(prefix.length())).matches();
+        };
+        try (DirectoryStream<Path> staleParts = Files.newDirectoryStream(filePath.getParent(), stalePart)) {
+            for (Path stale : staleParts) {
+                Files.deleteIfExists(stale);
+                logger.info("Part of another version of the file has been removed: '{}'", Printable.of(stale));
+            }
+        }
     }
 
     /**
@@ -209,7 +288,7 @@ public class FileSaveProcessor implements Processor<CompletableFuture<Stream<Pat
      */
     private int read(@NonNull InputStream inputStream, @NonNull byte[] buff, int bufferOffset, long readed, long contentLength) {
         try {
-            return inputStream.read(buff, bufferOffset, buff.length - bufferOffset);
+            return inputStream.read(buff, bufferOffset, (int) Math.min(buff.length - bufferOffset, contentLength - readed));
         } catch (IOException ioex) {
             logger.warn("Download has been interrupted at {} of {} bytes: '{}'. Cause: {}",
                     readed, contentLength, Printable.of(this.getPage().path()), Printable.of(ioex.getMessage()));
@@ -218,29 +297,51 @@ public class FileSaveProcessor implements Processor<CompletableFuture<Stream<Pat
     }
 
     /**
+     * Time of the file from the listing in the configured time zone
+     * @return time of the file or null if the listing has no time
+     */
+    private @Nullable Instant listingTime() {
+        return Optional.ofNullable(this.getPage().getHref().getDateTime())
+                .map(dateTime -> dateTime.atZone(this.getZone()).toInstant().truncatedTo(ChronoUnit.SECONDS))
+                .orElse(null);
+    }
+
+    /**
      * Set the time of the file from the listing. A failure is reported and does not affect the file
      * @param filePath path of the file
      * @param checkForChange report the change of the time of an existing file
      */
     private void syncFileTime(@NonNull Path filePath, boolean checkForChange) {
-        LocalDateTime dateTime = this.getPage().getHref().getDateTime();
-        if (dateTime == null) {
+        Instant listingTime = listingTime();
+        if (listingTime == null) {
             return;
         }
         try {
-            Instant listingTime = dateTime.atZone(this.getZone()).toInstant().truncatedTo(ChronoUnit.SECONDS);
             Instant fileTime = Files.getLastModifiedTime(filePath).toInstant().truncatedTo(ChronoUnit.SECONDS);
             if (!fileTime.equals(listingTime)) {
                 FileTime listingFileTime = FileTime.from(listingTime);
                 Files.setAttribute(filePath, "creationTime", listingFileTime);
                 Files.setLastModifiedTime(filePath, listingFileTime);
                 if (checkForChange) {
-                    logger.warn("File: '{}' already exists. Creation time has been reset to: {}", Printable.of(filePath), dateTime);
+                    logger.info("File: '{}' already exists. Its time has been reset to: {}", Printable.of(filePath), listingTime);
                 }
             }
         } catch (IOException ioex) {
             logger.warn("Unable to set the time of the file: '{}'. Cause: {} {}", Printable.of(filePath), ioex.getClass().getSimpleName(), Printable.of(ioex.getMessage()));
         }
+    }
+
+    /**
+     * The file on the site differs from the file in the listing: the downloaded part belongs to another version
+     */
+    private static final class ChangedFileException extends IOException {
+
+        private static final long serialVersionUID = 1L;
+
+        ChangedFileException(@NonNull String message) {
+            super(message);
+        }
+
     }
 
 }
