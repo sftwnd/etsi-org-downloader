@@ -2,10 +2,27 @@
 
     <statusListener class="ch.qos.logback.core.status.NopStatusListener" />
 
+    <!-- Stop the context on JVM exit: AsyncAppender works in a daemon thread and flushes its queue only on stop -->
+    <shutdownHook/>
+
+    <!-- The log is colored for a terminal. As https://no-color.org suggests, NO_COLOR that is set and not empty, an
+         environment variable or a system property, turns the colors off for a log that is not read in a terminal:
+         docker logs, a log collector, a file -->
+    <condition class="ch.qos.logback.core.boolex.ExpressionPropertyCondition">
+        <expression>isDefined("NO_COLOR") &amp;&amp; !propertyEquals("NO_COLOR", "")</expression>
+    </condition>
+    <if>
+        <then>
+            <variable name="LOG_PATTERN" value="%date{ISO8601} %-5level %msg%n"/>
+        </then>
+        <else>
+            <variable name="LOG_PATTERN" value="%green(%date{ISO8601}) %highlight(%-5level) %msg%n"/>
+        </else>
+    </if>
+
     <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
-        <withJansi>true</withJansi>
         <encoder>
-            <pattern>%green(%date{ISO8601}) %highlight(%-5level) %msg%n</pattern>
+            <pattern>${LOG_PATTERN}</pattern>
         </encoder>
     </appender>
 

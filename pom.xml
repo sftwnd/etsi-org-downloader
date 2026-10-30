@@ -6,7 +6,7 @@
 
     <groupId>com.github.sftwnd.etsiorg</groupId>
     <artifactId>etsiorg-downloader</artifactId>
-    <version>1.2</version>
+    <version>1.3</version>
 
     <name>ETSI.ORG :: Documents :: Downloader</name>
     <description>Document downloader from ETSI.ORG website</description>
@@ -24,29 +24,47 @@
         <url>https://github.com/sftwnd/etsi-org-downloader</url>
         <connection>scm:git:git@github.com:sftwnd/etsi-org-downloader.git</connection>
         <developerConnection>scm:git:git@github.com:sftwnd/etsi-org-downloader.git</developerConnection>
-        <tag>1.2</tag>
+        <tag>1.3</tag>
     </scm>
 
     <properties>
-        <maven.compiler.source>11</maven.compiler.source>
-        <maven.compiler.target>11</maven.compiler.target>
+        <!-- the Java 11 API on any JDK: javac checks the code against Java 11, not against the JDK it runs on -->
+        <maven.compiler.release>11</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <logback.version>1.5.3</logback.version>
-        <lombok.version>1.18.30</lombok.version>
-        <slf4j.version>2.0.12</slf4j.version>
-        <spotbugs-annotations.version>4.8.3</spotbugs-annotations.version>
-        <junit.version>5.10.2</junit.version>
-        <mockito.version>5.11.0</mockito.version>
-        <maven-assembly-plugin.version>3.7.0</maven-assembly-plugin.version>
-        <maven-compiler-plugin.version>3.12.1</maven-compiler-plugin.version>
-        <maven-clean-plugin.version>3.3.2</maven-clean-plugin.version>
-        <maven-jar-plugin.version>3.3.0</maven-jar-plugin.version>
+        <javaModuleName>com.github.sftwnd.etsiorg</javaModuleName>
+        <!-- the tests are patched into the module and use what the module does not require: the HTTP server of the JDK
+             and logback, which is bound to SLF4J as its service provider and whose configurator reads XML. javac takes
+             logback from the class path, Surefire puts it on the module path with the other dependencies of the module -->
+        <test.compile.addModules>jdk.httpserver,java.xml</test.compile.addModules>
+        <test.compile.addReads>${javaModuleName}=jdk.httpserver</test.compile.addReads>
+        <test.run.addReads>${javaModuleName}=jdk.httpserver,ch.qos.logback.classic,ch.qos.logback.core</test.run.addReads>
+        <!-- the latest releases that support Java 11: no alpha and beta versions, no 4.0.0 plugins (they require Maven 4) -->
+        <!-- logback 1.6 is built for Java 11 -->
+        <logback.version>1.6.6</logback.version>
+        <lombok.version>1.18.48</lombok.version>
+        <slf4j.version>2.0.20</slf4j.version>
+        <spotbugs-annotations.version>4.10.5</spotbugs-annotations.version>
+        <!-- JUnit 6 requires Java 17 -->
+        <junit.version>5.14.4</junit.version>
+        <!-- Mockito 5 is built for Java 11 -->
+        <mockito.version>5.24.0</mockito.version>
+        <maven-assembly-plugin.version>3.8.0</maven-assembly-plugin.version>
+        <maven-clean-plugin.version>3.5.0</maven-clean-plugin.version>
+        <maven-compiler-plugin.version>3.16.0</maven-compiler-plugin.version>
+        <maven-dependency-plugin.version>3.11.0</maven-dependency-plugin.version>
+        <maven-deploy-plugin.version>3.2.0</maven-deploy-plugin.version>
+        <maven-failsafe-plugin.version>3.6.1</maven-failsafe-plugin.version>
+        <maven-install-plugin.version>3.2.0</maven-install-plugin.version>
+        <maven-jar-plugin.version>3.5.1</maven-jar-plugin.version>
+        <maven-resources-plugin.version>3.5.0</maven-resources-plugin.version>
+        <maven-surefire-plugin.version>3.6.1</maven-surefire-plugin.version>
     </properties>
 
     <dependencies>
         <dependency>
             <groupId>com.github.spotbugs</groupId>
-            <artifactId>spotbugs</artifactId>
+            <artifactId>spotbugs-annotations</artifactId>
+            <scope>provided</scope>
             <optional>true</optional>
         </dependency>
         <dependency>
@@ -66,6 +84,16 @@
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-params</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-engine</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -95,6 +123,30 @@
                     </compilerArgs>
                     <showWarnings>true</showWarnings>
                 </configuration>
+                <executions>
+                    <execution>
+                        <id>default-testCompile</id>
+                        <configuration>
+                            <compilerArgs combine.children="append">
+                                <arg>--add-modules</arg>
+                                <arg>${test.compile.addModules}</arg>
+                                <arg>--add-reads</arg>
+                                <arg>${test.compile.addReads}</arg>
+                            </compilerArgs>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <argLine>--add-reads ${test.run.addReads}</argLine>
+                    <systemPropertyVariables>
+                        <etsiorg.version>${project.version}</etsiorg.version>
+                    </systemPropertyVariables>
+                </configuration>
             </plugin>
 
             <plugin>
@@ -104,7 +156,34 @@
                     <excludes>
                         <exclude>logback*.xml</exclude>
                     </excludes>
+                    <archive>
+                        <manifest>
+                            <!-- the jar of a module: the main class is set in the module descriptor as well -->
+                            <mainClass>com.github.sftwnd.etsiorg.Main</mainClass>
+                            <!-- Implementation-Version: the version of the downloader on the class path -->
+                            <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
+                        </manifest>
+                    </archive>
                 </configuration>
+            </plugin>
+
+            <plugin>
+                <!-- the modules the downloader needs at runtime, for the module path -->
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>copy-modules</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>copy-dependencies</goal>
+                        </goals>
+                        <configuration>
+                            <includeScope>runtime</includeScope>
+                            <outputDirectory>${project.build.directory}/lib</outputDirectory>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
 
             <plugin>
@@ -131,13 +210,15 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-assembly-plugin</artifactId>
                 <configuration>
-                    <descriptorRefs>
-                        <descriptorRef>jar-with-dependencies</descriptorRef>
-                    </descriptorRefs>
+                    <!-- jar-with-dependencies without the module descriptors: the fat jar is for the class path -->
+                    <descriptors>
+                        <descriptor>src/assembly/jar-with-dependencies.xml</descriptor>
+                    </descriptors>
                     <archive>
                         <manifest>
-                            <addClasspath>true</addClasspath>
                             <mainClass>com.github.sftwnd.etsiorg.Main</mainClass>
+                            <!-- Implementation-Version: the version of the downloader on the class path -->
+                            <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
                         </manifest>
                     </archive>
                 </configuration>
@@ -151,9 +232,34 @@
                 </executions>
             </plugin>
 
+
+            <plugin>
+                <!-- the packaged jars: the module runs on the module path, the fat jar on the class path -->
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <configuration>
+                    <systemPropertyVariables>
+                        <etsiorg.moduleJar>${project.build.directory}/${project.build.finalName}.jar</etsiorg.moduleJar>
+                        <etsiorg.modulePath>${project.build.directory}/lib</etsiorg.modulePath>
+                        <etsiorg.fatJar>${project.build.directory}/${project.build.finalName}-jar-with-dependencies.jar</etsiorg.fatJar>
+                        <etsiorg.logbackConfiguration>${project.basedir}/src/main/resources/logback.xml</etsiorg.logbackConfiguration>
+                        <etsiorg.version>${project.version}</etsiorg.version>
+                    </systemPropertyVariables>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
         </plugins>
 
         <pluginManagement>
+            <!-- every plugin of the lifecycle is pinned: the defaults of the super POM depend on the Maven version -->
             <plugins>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
@@ -172,8 +278,38 @@
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-dependency-plugin</artifactId>
+                    <version>${maven-dependency-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-deploy-plugin</artifactId>
+                    <version>${maven-deploy-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-failsafe-plugin</artifactId>
+                    <version>${maven-failsafe-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-install-plugin</artifactId>
+                    <version>${maven-install-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-jar-plugin</artifactId>
                     <version>${maven-jar-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-resources-plugin</artifactId>
+                    <version>${maven-resources-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <version>${maven-surefire-plugin.version}</version>
                 </plugin>
             </plugins>
         </pluginManagement>
@@ -205,7 +341,7 @@
             </dependency>
             <dependency>
                 <groupId>com.github.spotbugs</groupId>
-                <artifactId>spotbugs</artifactId>
+                <artifactId>spotbugs-annotations</artifactId>
                 <version>${spotbugs-annotations.version}</version>
             </dependency>
             <dependency>

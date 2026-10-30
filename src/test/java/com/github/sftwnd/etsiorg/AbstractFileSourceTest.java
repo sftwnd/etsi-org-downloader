@@ -38,6 +38,10 @@ abstract class AbstractFileSourceTest {
         return Path.of("target/temp/root");
     }
 
+    URI uri() {
+        return FOO_URI;
+    }
+
     Path path() {
         return Path.of("target/temp/path", fileName().toString());
     }
@@ -68,13 +72,14 @@ abstract class AbstractFileSourceTest {
         this.page = spy(Page.of(href));
 
         doNothing().when(this.page).connect(anyLong());
-        when(this.href.getUri()).thenReturn(FOO_URI);
+        when(this.href.getUri()).thenReturn(uri());
         when(this.href.getBytes()).thenReturn(this.bytes);
         when(this.href.getDateTime()).thenReturn(this.dateTime);
         when(this.href.path()).thenReturn(path());
         when(this.href.name()).thenReturn(fileName());
         when(this.page.getHref()).thenReturn(this.href);
         when(this.page.inputStream()).thenReturn(this.inputStream);
+        when(this.page.inputStreamFrom(anyLong())).thenReturn(this.inputStream);
 
     }
 

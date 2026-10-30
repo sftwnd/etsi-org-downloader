@@ -1,16 +1,34 @@
-version: "3.8"
-
 services:
 
   etsiorg:
     container_name: "etsiorg-downloader"
     build:
       context: ./
-    image: sftwnd/etsi-org:1.0
+    # the image of the sources at hand; the downloader logs its version at the start
+    image: sftwnd/etsiorg-downloader
     hostname: etsiorg-downloader
+    environment:
+      # the settings of the downloader, if they are set in the environment of docker compose or in .env
+      - ETSIORG_URI
+      - ETSIORG_THREADS
+      - ETSIORG_ZONE
+      - ETSIORG_DRY_RUN
+    # a run needs about 1.2 KB of heap per file of the tree: 1 GiB, 75 % of it for the heap, is enough for about
+    # 600 000 files; ETSIORG_MEMORY and ETSIORG_CPUS change the limits
+    mem_limit: ${ETSIORG_MEMORY:-1g}
+    cpus: ${ETSIORG_CPUS:-2}
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      # a run logs a line per file: the log is rotated, at most 5 files of 10 MB
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "5"
     volumes:
-      - ${HOME}/.m2:/root/.m2
-      - ./.settings.xml:/root/.m2/settings.xml
-      - ./:/opt/share/etsiorg
-    command:
-      - "/opt/share/etsiorg/run.sh"
+      # the whole destination folder of the image (ETSIORG_DEST=/data): ./mirror, the default destination folder of
+      # run.sh as well, or the host folder ETSIORG_DEST names in the environment of docker compose or in .env
+      - ${ETSIORG_DEST:-./mirror}:/data

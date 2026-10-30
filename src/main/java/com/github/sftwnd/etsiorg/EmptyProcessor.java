@@ -2,28 +2,26 @@ package com.github.sftwnd.etsiorg;
 
 import edu.umd.cs.findbugs.annotations.NonNull;
 
-import java.nio.file.Path;
 import java.util.concurrent.CompletableFuture;
-import java.util.stream.Stream;
 
 /**
  * Empty Path loader
  */
-public class EmptyProcessor implements Processor<CompletableFuture<Stream<Path>>> {
+public class EmptyProcessor implements Processor<CompletableFuture<Summary>> {
 
-    public static final Processor<CompletableFuture<Stream<Path>>> DEFAULT = new EmptyProcessor();
+    public static final Processor<CompletableFuture<Summary>> DEFAULT = new EmptyProcessor();
 
     private EmptyProcessor() {
     }
 
     /**
      * Do nothing processor
-     * @return empty completed future
+     * @return completed future with the empty summary
      */
     @NonNull
     @Override
-    public CompletableFuture<Stream<Path>> process() {
-        return CompletableFuture.completedFuture(Stream.empty());
+    public CompletableFuture<Summary> process() {
+        return CompletableFuture.completedFuture(Summary.EMPTY);
     }
 
 }

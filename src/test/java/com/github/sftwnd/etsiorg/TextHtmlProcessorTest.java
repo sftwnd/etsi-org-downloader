@@ -1,30 +1,49 @@
 package com.github.sftwnd.etsiorg;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import edu.umd.cs.findbugs.annotations.NonNull;
-import lombok.AccessLevel;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
-import java.util.function.Consumer;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.when;
 
 class TextHtmlProcessorTest extends AbstractFileSourceTest {
 
@@ -33,7 +52,7 @@ class TextHtmlProcessorTest extends AbstractFileSourceTest {
     void textHtmlProcessorNullPageTest() {
         assertThrows(
                 NullPointerException.class,
-                () -> new TextHtmlProcessor(this.<Page>nullRef().get(), mock(ProcessorFactory.class), mock(Executor.class), mock(Consumer.class))
+                () -> new TextHtmlProcessor(this.<Page>nullRef().get(), mock(ProcessorFactory.class), linkPolicy(), mock(Executor.class), mock(Function.class))
         );
     }
 
@@ -44,17 +63,54 @@ class TextHtmlProcessorTest extends AbstractFileSourceTest {
                 NullPointerException.class,
                 () -> new TextHtmlProcessor(
                         mock(Page.class),
-                        this.<ProcessorFactory<CompletableFuture<Stream<Path>>>>nullRef().get(),
+                        this.<ProcessorFactory<CompletableFuture<Summary>>>nullRef().get(),
+                        linkPolicy(),
                         mock(Executor.class),
-                        mock(Consumer.class)));
+                        mock(Function.class)));
+    }
+
+    @Test
+    @SuppressWarnings({"unchecked"})
+    void textHtmlProcessorLinkPolicyNull() {
+        assertThrows(
+                NullPointerException.class,
+                () -> new TextHtmlProcessor(
+                        mock(Page.class),
+                        mock(ProcessorFactory.class),
+                        this.<LinkPolicy>nullRef().get(),
+                        mock(Executor.class),
+                        mock(Function.class)));
     }
 
     @Test
     @SuppressWarnings("unchecked")
     void textHtmlProcessorTest() {
         assertDoesNotThrow(
-                () -> new TextHtmlProcessor(mock(Page.class), mock(ProcessorFactory.class), null, null)
+                () -> new TextHtmlProcessor(mock(Page.class), mock(ProcessorFactory.class), linkPolicy(), DIRECT, null)
         );
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void textHtmlProcessorExecutorNull() {
+        assertThrows(
+                NullPointerException.class,
+                () -> new TextHtmlProcessor(mock(Page.class), mock(ProcessorFactory.class), linkPolicy(), this.<Executor>nullRef().get(), null)
+        );
+    }
+
+    @Test
+    void childrenRunOnExecutorTest() throws Exception {
+        startUp("non-version");
+        ExecutorService executor = Executors.newSingleThreadExecutor(runnable -> new Thread(runnable, "test-pool"));
+        try {
+            new TextHtmlProcessor(this.page, this.processorFactory, new LinkPolicy(URI.create("http://localhost/deliver/")), executor, this.onExpires)
+                    .process()
+                    .get(10, TimeUnit.SECONDS);
+        } finally {
+            executor.shutdownNow();
+        }
+        assertEquals(Set.of("test-pool"), Set.copyOf(((FooProcessorFactory) this.processorFactory).threads));
     }
 
     @Test
@@ -72,24 +128,192 @@ class TextHtmlProcessorTest extends AbstractFileSourceTest {
         processFileTest("non-version");
     }
 
+    @Test
+    void processHostileHtmlTest() throws IOException {
+        processFileTest("hostile");
+    }
+
+    @Test
+    void processUnpaddedVersionsHtmlTest() throws IOException {
+        processFileTest("versions-unpadded");
+    }
+
+    @Test
+    void processPrematureEndOfListingTest() throws IOException {
+        startUp("files");
+        when(this.href.getBytes()).thenReturn(this.bytes + 10);
+        var completableFuture = assertDoesNotThrow(() -> this.textHtmlProcessor(this.page).process());
+        assertEquals(Summary.FAILED, assertDoesNotThrow(completableFuture::join));
+    }
+
+    @Test
+    void expiredAfterActualVersionTest() throws IOException {
+        startUp("versions");
+        CompletableFuture<Summary> actual = new CompletableFuture<>();
+        ProcessorFactory<CompletableFuture<Summary>> factory = page -> () -> actual;
+        CompletableFuture<Summary> result = new TextHtmlProcessor(this.page, factory, linkPolicy(), DIRECT, this.onExpires).process();
+        assertFalse(result.isDone());
+        assertNull(this.excluded);
+        actual.complete(Summary.downloaded(1L));
+        assertEquals(Summary.downloaded(1L).plus(Summary.removed(VERSION_EXCLUDES.size())), result.join());
+        assertEquals(VERSION_EXCLUDES, this.excluded);
+    }
+
+    @Test
+    void failedActualVersionKeepsExpiredTest() throws IOException {
+        startUp("versions");
+        ProcessorFactory<CompletableFuture<Summary>> factory = page -> () -> CompletableFuture.completedFuture(Summary.FAILED.plus(Summary.downloaded(1L)));
+        Summary summary = new TextHtmlProcessor(this.page, factory, linkPolicy(), DIRECT, this.onExpires).process().join();
+        assertEquals(1L, summary.getFailed());
+        assertNull(this.excluded);
+    }
+
+    @Test
+    void failedRemovalIsFailureTest() throws IOException {
+        startUp("versions");
+        ProcessorFactory<CompletableFuture<Summary>> factory = page -> () -> CompletableFuture.completedFuture(Summary.downloaded(1L));
+        Function<Collection<URI>, Summary> failingRemoval = expired -> {
+            throw new IllegalStateException("removal failed");
+        };
+        Summary summary = new TextHtmlProcessor(this.page, factory, linkPolicy(), DIRECT, failingRemoval).process().join();
+        assertEquals(1L, summary.getDownloaded());
+        assertEquals(1L, summary.getFailed());
+    }
+
+    @Test
+    void invalidEntryIsIsolatedTest() throws IOException {
+        startUp("invalid-entry");
+        Summary summary = this.textHtmlProcessor(this.page).process().join();
+        assertEquals(List.of(Path.of("/deliver/etsi_ts/129000_129099/129078/17.00.00_60/ts_129078v170000p0.zip")), processedPaths());
+        assertEquals(1L, summary.getDownloaded());
+        assertEquals(1L, summary.getFailed());
+    }
+
+    @Test
+    void failingChildIsIsolatedTest() throws IOException {
+        startUp("files");
+        ProcessorFactory<CompletableFuture<Summary>> failing = page -> page.fileName().endsWith(".pdf")
+                ? () -> { throw new IllegalStateException("broken processor"); }
+                : () -> CompletableFuture.completedFuture(Summary.downloaded(1L));
+        Summary summary = new TextHtmlProcessor(this.page, failing, linkPolicy(), DIRECT, this.onExpires).process().join();
+        assertEquals(1L, summary.getDownloaded());
+        assertEquals(1L, summary.getFailed());
+    }
+
+    @Test
+    void processRealListingTest() throws IOException {
+        startUp("etsi-129078");
+        Path actual = Path.of("/deliver/etsi_ts/129000_129099/129078/19.00.00_60");
+        assertEquals(List.of(actual), processPaths());
+        assertEquals(61, this.excluded.size());
+        assertFalse(this.excluded.contains(actual));
+    }
+
+    @Test
+    void processChunkedListingTest() throws IOException {
+        startUp("files");
+        doReturn(-1L).when(this.page).contentLength();
+        assertEquals(FILES_PATHS, processPaths());
+    }
+
+    @Test
+    void processTooLargeDeclaredListingTest() throws IOException {
+        startUp("files");
+        doReturn(TextHtmlProcessor.MAX_LISTING_SIZE + 1L).when(this.page).contentLength();
+        assertEquals(List.of(), processPaths());
+    }
+
+    @Test
+    void processTooLargeChunkedListingTest() throws IOException {
+        startUp("files");
+        doReturn(-1L).when(this.page).contentLength();
+        when(this.page.inputStream()).thenReturn(new InputStream() {
+            @Override
+            public int read() {
+                return 'x';
+            }
+        });
+        assertEquals(List.of(), processPaths());
+    }
+
+    @Test
+    void processBacktrackingLineTest() throws IOException {
+        startUp("files");
+        byte[] line = ("<br> 1/1/2020  1:00 AM 123 <a " + "href=\"\">".repeat(20_000)).getBytes(StandardCharsets.US_ASCII);
+        doReturn((long) line.length).when(this.page).contentLength();
+        when(this.page.inputStream()).thenReturn(new ByteArrayInputStream(line));
+        var result = assertTimeoutPreemptively(Duration.ofSeconds(5), () -> this.textHtmlProcessor(this.page).process().join());
+        assertEquals(Summary.EMPTY, result);
+    }
+
+    @Test
+    void processRelativeLinksTest() throws IOException {
+        Logger logger = (Logger) LoggerFactory.getLogger(TextHtmlProcessor.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            processFileTest("relative");
+        } finally {
+            logger.detachAppender(appender);
+        }
+        Map<String, HREF> processed = ((FooProcessorFactory) this.processorFactory).processed.stream()
+                .collect(Collectors.toMap(href -> href.name().toString(), Function.identity()));
+        assertEquals(URI.create("http://localhost/deliver/etsi_ts/129000_129099/129011/17.00.00_60/"), processed.get("17.00.00_60").getUri());
+        assertEquals(LocalDateTime.of(2022, 4, 21, 20, 41), processed.get("ts_129011v170000p0.zip").getDateTime());
+        assertEquals(LocalDateTime.of(2022, 4, 21, 20, 41), processed.get("ts_129011_readme.txt").getDateTime());
+        assertEquals(List.of("1 of 5 links are not recognized in the listing: '" + this.path() + "'"),
+                appender.list.stream()
+                        .filter(event -> event.getLevel() == Level.WARN)
+                        .map(ILoggingEvent::getFormattedMessage)
+                        .collect(Collectors.toList()));
+    }
+
     void processFileTest(@NonNull String name) throws IOException {
         startUp(name);
         var completableFuture = assertDoesNotThrow(() -> this.textHtmlProcessor(this.page).process());
         assertNotNull(completableFuture);
-        var pathsStream = assertDoesNotThrow(completableFuture::join);
-        assertEquals(this.paths, pathsStream.collect(Collectors.toList()));
+        Summary summary = assertDoesNotThrow(completableFuture::join);
+        assertEquals(this.paths, processedPaths());
+        assertEquals(this.paths.size(), summary.getDownloaded());
         assertEquals(this.excludes, this.excluded);
+    }
+
+    /**
+     * Process the page and collect the paths of the processed children; every child is reported as downloaded
+     */
+    private List<Path> processPaths() {
+        Summary summary = this.textHtmlProcessor(this.page).process().join();
+        List<Path> paths = processedPaths();
+        assertEquals(paths.size(), summary.getDownloaded());
+        return paths;
+    }
+
+    private List<Path> processedPaths() {
+        return ((FooProcessorFactory) this.processorFactory).processed.stream().map(HREF::path).collect(Collectors.toList());
+    }
+
+    /**
+     * New link policy: it keeps the visited resources, so it cannot be shared between tests
+     */
+    private static LinkPolicy linkPolicy() {
+        return new LinkPolicy(URI.create("http://localhost/deliver/"));
     }
 
     private <T> Supplier<T> nullRef() {
         return () -> null;
     }
 
-    private ProcessorFactory<CompletableFuture<Stream<Path>>> processorFactory;
-    private Consumer<Collection<Path>> onExpires;
+    private ProcessorFactory<CompletableFuture<Summary>> processorFactory;
+    private Function<Collection<URI>, Summary> onExpires;
     private Collection<Path> paths;
     private Collection<Path> excludes;
     private Collection<Path> excluded;
+
+    @Override
+    URI uri() {
+        return URI.create("http://localhost/deliver/etsi_ts/129000_129099/129011/");
+    }
 
     void startUp(@NonNull String name) throws IOException {
         super.startUp(name+".html");
@@ -97,11 +321,14 @@ class TextHtmlProcessorTest extends AbstractFileSourceTest {
         this.excludes = RESULTS_MAP.get(name + "-excludes");
         this.excluded = null;
         this.processorFactory = spy(new FooProcessorFactory());
-        this.onExpires = list -> this.excluded = list;
+        this.onExpires = list -> {
+            this.excluded = list.stream().map(uri -> Path.of(uri.getPath())).collect(Collectors.toList());
+            return Summary.removed(list.size());
+        };
     }
 
     private @NonNull TextHtmlProcessor textHtmlProcessor(@NonNull Page page) {
-        return new TextHtmlProcessor(page, this.processorFactory, null, this.onExpires);
+        return new TextHtmlProcessor(page, this.processorFactory, new LinkPolicy(URI.create("http://localhost/deliver/")), DIRECT, this.onExpires);
     }
 
     @AfterEach
@@ -117,24 +344,17 @@ class TextHtmlProcessorTest extends AbstractFileSourceTest {
         }
     }
 
-    static class FooProcessorFactory implements ProcessorFactory<CompletableFuture<Stream<Path>>> {
-        @NonNull
-        @Override
-        public Processor<CompletableFuture<Stream<Path>>> processor(@NonNull Page page) {
-            return new FooProcessor(page.path());
-        }
-    }
+    static class FooProcessorFactory implements ProcessorFactory<CompletableFuture<Summary>> {
 
-    @AllArgsConstructor
-    static class FooProcessor implements Processor<CompletableFuture<Stream<Path>>> {
-
-        @Getter(value = AccessLevel.PRIVATE)
-        private final Path path;
+        final List<HREF> processed = Collections.synchronizedList(new ArrayList<>());
+        final List<String> threads = Collections.synchronizedList(new ArrayList<>());
 
         @NonNull
         @Override
-        public CompletableFuture<Stream<Path>> process() {
-            return CompletableFuture.completedFuture(Stream.of(this.getPath()));
+        public Processor<CompletableFuture<Summary>> processor(@NonNull Page page) {
+            processed.add(page.getHref());
+            threads.add(Thread.currentThread().getName());
+            return () -> CompletableFuture.completedFuture(Summary.downloaded(1L));
         }
     }
 
@@ -200,10 +420,59 @@ class TextHtmlProcessorTest extends AbstractFileSourceTest {
             .map(fileName -> Path.of("/deliver/etsi_ts/129000_129099/129011", fileName))
             .collect(Collectors.toList());
 
+    /*  hostile: links outside the mirrored folder are skipped, a duplicate is processed once
+
+        + /deliver/etsi_ts/129000_129099/129011/ts_129011v170000p.pdf
+        + /deliver/etsi_ts/129000_129099/129011/17.00.00_60
+
+        - /deliver/etsi_ts/129000_129099/129011/16.00.00_60
+    */
+
+    private static final Collection<Path> HOSTILE_PATHS = List.of(
+            Path.of("/deliver/etsi_ts/129000_129099/129011/ts_129011v170000p.pdf"),
+            Path.of("/deliver/etsi_ts/129000_129099/129011/17.00.00_60"));
+
+    private static final Collection<Path> HOSTILE_EXCLUDES = List.of(Path.of("/deliver/etsi_ts/129000_129099/129011/16.00.00_60"));
+
+    /*  versions-unpadded: the actual version is chosen by number, only strictly older versions expire once
+
+        + /deliver/etsi_ts/129000_129099/129011/10.00.00_60
+
+        - /deliver/etsi_ts/129000_129099/129011/9.00.00_60
+        - /deliver/etsi_ts/129000_129099/129011/8.05.00_60
+    */
+
+    private static final Collection<Path> UNPADDED_VERSIONS_PATHS = List.of(Path.of("/deliver/etsi_ts/129000_129099/129011/10.00.00_60"));
+
+    private static final Collection<Path> UNPADDED_VERSIONS_EXCLUDES = Stream.of("9.00.00_60", "8.05.00_60")
+            .map(fileName -> Path.of("/deliver/etsi_ts/129000_129099/129011", fileName))
+            .collect(Collectors.toList());
+
+    /*  relative: entities are decoded, relative links are resolved against the listing page,
+        the folder link gets a trailing '/', 'pm' is recognized, one line of an unknown format is reported
+
+        + /deliver/etsi_ts/129000_129099/129011/ts&annex.pdf
+        + /deliver/etsi_ts/129000_129099/129011/ts_129011v170000p0.zip
+        + /deliver/etsi_ts/129000_129099/129011/ts_129011_readme.txt
+        + /deliver/etsi_ts/129000_129099/129011/17.00.00_60
+    */
+
+    private static final Collection<Path> RELATIVE_PATHS = Stream
+            .of("ts&annex.pdf", "ts_129011v170000p0.zip", "ts_129011_readme.txt", "17.00.00_60")
+            .map(fileName -> Path.of("/deliver/etsi_ts/129000_129099/129011", fileName))
+            .collect(Collectors.toList());
+
+    private static final Executor DIRECT = Runnable::run;
+
     private static final Map<String, Collection<Path>> RESULTS_MAP = Map.of(
             "files-paths", FILES_PATHS,
             "non-version-paths", NON_VERSION_PATHS,
             "versions-paths", VERSIONS_PATHS,
-            "versions-excludes", VERSION_EXCLUDES);
+            "versions-excludes", VERSION_EXCLUDES,
+            "hostile-paths", HOSTILE_PATHS,
+            "hostile-excludes", HOSTILE_EXCLUDES,
+            "versions-unpadded-paths", UNPADDED_VERSIONS_PATHS,
+            "versions-unpadded-excludes", UNPADDED_VERSIONS_EXCLUDES,
+            "relative-paths", RELATIVE_PATHS);
 
 }

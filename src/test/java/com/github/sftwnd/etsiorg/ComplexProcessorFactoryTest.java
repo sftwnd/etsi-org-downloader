@@ -6,10 +6,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
-import java.nio.file.Path;
+import java.net.URI;
 import java.util.Collection;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
-import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -19,6 +20,8 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class ComplexProcessorFactoryTest {
@@ -39,12 +42,8 @@ class ComplexProcessorFactoryTest {
         when(href.isRegularFile()).thenReturn(true);
         when(page.fileName()).thenReturn("file.pdf");
         assertDoesNotThrow(() -> this.factory.processor(this.page));
-        var processor = this.factory.processor(this.page);
-        assertNotNull(processor);
-        assertEquals(FileSaveProcessor.class, processor.getClass());
-        FileSaveProcessor fileSaveProcessor = (FileSaveProcessor)processor;
-        assertEquals(this.page, fileSaveProcessor.getPage());
-        assertEquals(this.root.toString(), fileSaveProcessor.getRoot());
+        assertSame(this.fileProcessor, this.factory.processor(this.page));
+        verify(this.files, times(2)).processor(this.page);
     }
 
     @Test
@@ -58,18 +57,34 @@ class ComplexProcessorFactoryTest {
         TextHtmlProcessor textHtmlProcessor = (TextHtmlProcessor)processor;
         assertEquals(this.page, textHtmlProcessor.getPage());
         assertEquals(this.factory, textHtmlProcessor.getProcessorFactory());
+        assertSame(this.linkPolicy, textHtmlProcessor.getLinkPolicy());
         assertEquals(this.executor, textHtmlProcessor.getExecutor());
         assertEquals(this.onExpires, textHtmlProcessor.getOnExpires());
     }
 
     @Test
-    void nullRootConstructorTest() {
-        assertThrows(NullPointerException.class, () -> new ComplexProcessorFactory(null, this.executor, this.onExpires));
+    void nullFilesConstructorTest() {
+        assertThrows(NullPointerException.class, () -> new ComplexProcessorFactory(null, this.linkPolicy, this.executor, this.onExpires));
     }
 
     @Test
-    void getRootTest() {
-        assertSame(this.root, this.factory.getRoot());
+    void nullExecutorConstructorTest() {
+        assertThrows(NullPointerException.class, () -> new ComplexProcessorFactory(this.files, this.linkPolicy, null, this.onExpires));
+    }
+
+    @Test
+    void nullLinkPolicyConstructorTest() {
+        assertThrows(NullPointerException.class, () -> new ComplexProcessorFactory(this.files, null, this.executor, this.onExpires));
+    }
+
+    @Test
+    void getLinkPolicyTest() {
+        assertSame(this.linkPolicy, this.factory.getLinkPolicy());
+    }
+
+    @Test
+    void getFilesTest() {
+        assertSame(this.files, this.factory.getFiles());
     }
 
     @Test
@@ -88,17 +103,22 @@ class ComplexProcessorFactoryTest {
         this.href = mock(HREF.class);
         this.page = mock(Page.class);
         when(this.page.getHref()).thenReturn(this.href);
-        this.root = mock(Path.class);
+        this.fileProcessor = (Processor<CompletableFuture<Summary>>) mock(Processor.class);
+        this.files = (ProcessorFactory<CompletableFuture<Summary>>) mock(ProcessorFactory.class);
+        when(this.files.processor(this.page)).thenReturn(this.fileProcessor);
+        this.linkPolicy = new LinkPolicy(URI.create("http://localhost/deliver/"));
         this.executor = mock(Executor.class);
-        this.onExpires = (Consumer<Collection<Path>>)Mockito.mock(Consumer.class);
-        this.factory = spy(new ComplexProcessorFactory(this.root, this.executor, this.onExpires));
+        this.onExpires = (Function<Collection<URI>, Summary>) Mockito.mock(Function.class);
+        this.factory = spy(new ComplexProcessorFactory(this.files, this.linkPolicy, this.executor, this.onExpires));
     }
 
     @AfterEach
     void tearDown() {
         this.href = null;
         this.page = null;
-        this.root = null;
+        this.fileProcessor = null;
+        this.files = null;
+        this.linkPolicy = null;
         this.executor = null;
         this.onExpires = null;
         this.factory = null;
@@ -106,9 +126,11 @@ class ComplexProcessorFactoryTest {
 
     private HREF href;
     private Page page;
-    private Path root;
+    private Processor<CompletableFuture<Summary>> fileProcessor;
+    private ProcessorFactory<CompletableFuture<Summary>> files;
+    private LinkPolicy linkPolicy;
     private Executor executor;
-    private Consumer<Collection<Path>> onExpires;
+    private Function<Collection<URI>, Summary> onExpires;
     private ComplexProcessorFactory factory;
 
 }

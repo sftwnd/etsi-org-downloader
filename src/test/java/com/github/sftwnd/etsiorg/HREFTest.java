@@ -6,12 +6,16 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.net.URI;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.Random;
 import java.util.stream.IntStream;
 import java.util.stream.LongStream;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -61,6 +65,23 @@ class HREFTest {
     @Test
     void versionNameTest() {
         assertEquals(DEFAULT_VERSIONED_NAME, HREF.versionName(DEFAULT_VERSION));
+    }
+
+    @Test
+    void numericVersionOrderTest() {
+        assertTrue(HREF.versionOfFile("10.00.00_60") > HREF.versionOfFile("9.00.00_60"));
+        assertTrue(HREF.versionOfFile("9.00.00_60") > HREF.versionOfFile("8.05.00_60"));
+    }
+
+    @Test
+    void largestVersionTest() {
+        assertEquals("999.999.999_999", HREF.versionName(HREF.versionOfFile("999.999.999_999")));
+    }
+
+    @Test
+    void notVersionedNameTest() {
+        Stream.of("1000.00.00_60", "99999999999999999999.00.00_60", "17.00.00", "17.00.00_60a", "v17.00.00_60")
+                .forEach(name -> assertEquals(0L, HREF.versionOfFile(name), name));
     }
 
     @Test
@@ -142,6 +163,23 @@ class HREFTest {
     @Test
     void isVersioned() {
         assertTrue(builder(DEFAULT_VERSIONED_NAME).build().isVersioned());
+    }
+
+    @Test
+    void immutableFieldsTest() {
+        Arrays.stream(HREF.class.getDeclaredFields())
+                .filter(field -> !Modifier.isStatic(field.getModifiers()))
+                .forEach(field -> assertTrue(Modifier.isFinal(field.getModifiers()), field.getName() + " is not final"));
+    }
+
+    @Test
+    void noSettersTest() {
+        assertTrue(Arrays.stream(HREF.class.getMethods()).map(Method::getName).noneMatch(name -> name.startsWith("set")));
+    }
+
+    @Test
+    void singleValidatingConstructorTest() {
+        assertEquals(1, HREF.class.getDeclaredConstructors().length);
     }
 
     @Test

@@ -1,0 +1,30 @@
+# Updates of the pinned versions as pull requests into develop, the branch of the development; the pull requests are
+# built and tested by .github/workflows/build.yml. Dependabot uses this file from the default branch, master
+version: 2
+updates:
+  - package-ecosystem: docker
+    directory: /
+    target-branch: develop
+    schedule:
+      interval: weekly
+    ignore:
+      # the build and the runtime stay on Java 11: only the digest of the tag 11-jdk is updated
+      - dependency-name: eclipse-temurin
+        update-types: [ "version-update:semver-major" ]
+  - package-ecosystem: maven
+    directory: /
+    target-branch: develop
+    schedule:
+      interval: weekly
+    ignore:
+      # JUnit 6 requires Java 17
+      - dependency-name: org.junit:junit-bom
+        versions: [ "[6,)" ]
+      # the plugins 4 require Maven 4
+      - dependency-name: org.apache.maven.plugins:*
+        versions: [ "[4,)" ]
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: develop
+    schedule:
+      interval: weekly
