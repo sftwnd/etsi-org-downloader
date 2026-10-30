@@ -87,11 +87,11 @@ java -Dlogback.configurationFile=src/main/resources/logback.xml -Duri=https://ww
 A run can be interrupted at any moment: the next run resumes the unfinished downloads. It ends with the summary
 `Files downloaded: N, up to date: M, failed: K` and the exit status:
 
-| Status | Meaning                                                                                     |
-|--------|---------------------------------------------------------------------------------------------|
-| `0`    | no failures                                                                                 |
-| `1`    | some resources have failed; a repeated run does not download the already downloaded files   |
-| `2`    | invalid configuration: an invalid setting or an argument other than `-h` and `--help`       |
+| Status | Meaning                                                                                                                                                             |
+|--------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `0`    | no failures                                                                                                                                                         |
+| `1`    | some resources have failed; a repeated run does not download the already downloaded files                                                                           |
+| `2`    | invalid configuration, found before the first request: an invalid setting, an argument other than `-h` and `--help`, or a destination folder that cannot be written |
 
 ## Docker
 
@@ -99,15 +99,15 @@ A run can be interrupted at any moment: the next run resumes the unfinished down
 docker compose up --build
 ```
 
-The image is built from the sources with `./mvnw` without the tests, which run in continuous integration, and runs
-the downloader as a non-root user (UID 10001) with a read-only file system. Only the destination folder is mounted,
-at `/data`: `./mirror` of the project folder, or the host folder `ETSIORG_MIRROR` names in the environment or in `.env`,
+The image is built from the sources with `./mvnw` without the tests, which run in continuous integration, and runs the
+downloader as a non-root user (UID 10001) with a read-only file system. Only the destination folder is mounted, at
+`/data`: `./mirror` of the project folder, or the host folder `ETSIORG_MIRROR` names in the environment or in `.env`,
 e.g. `ETSIORG_MIRROR=/srv/etsi docker compose up`. The files are stored under their path on the site,
-`mirror/deliver/...`. On Linux create the folder and make it writable for the user before the first start,
-e.g. `mkdir -p mirror && sudo chown 10001 mirror`. A mirror made by an earlier version in `./deliver` of the project
-folder is moved once: `mkdir -p mirror && mv deliver mirror/`. The log of the container is not colored: the image sets
-`NO_COLOR=1`. A run logs a line per file, so the log is rotated: at most five files of 10 MB (`logging`
-in `docker-compose.yml`), and `docker logs` shows what they hold.
+`mirror/deliver/...`. On Linux create the folder and make it writable for the user before the first start, e.g.
+`mkdir -p mirror && sudo chown 10001 mirror`; otherwise the run stops at once with the status 2. A mirror made by an
+earlier version in `./deliver` of the project folder is moved once: `mkdir -p mirror && mv deliver mirror/`. The log of
+the container is not colored: the image sets `NO_COLOR=1`. A run logs a line per file, so the log is rotated: at most
+five files of 10 MB (`logging` in `docker-compose.yml`), and `docker logs` shows what they hold.
 
 The settings are environment variables: the image sets `ETSIORG_DEST=/data`, and `docker-compose.yml` passes
 `ETSIORG_URI`, `ETSIORG_THREADS` and `ETSIORG_ZONE` from the environment of docker compose or from `.env`:

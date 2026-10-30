@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-10-30
+- Amended: 2026-10-30 — the destination folder is checked before the crawl (#59)
 - Russian version: [ADR-0001](ru/0001-destination-local-paths.md)
 
 ## Context
@@ -32,6 +33,10 @@ Introduce `Destination`, the only place where a resource URI becomes a local pat
 `FileSaveProcessor` takes the file path only from `Destination`; `Main` maps expired versions the same way before
 removing them, so `onExpires` receives URIs instead of decoded paths.
 
+Before the crawl `Destination.prepare()` creates the destination folder and creates and deletes a probe file
+`.etsiorg-*.probe` in it; if it fails, the run ends at once as an invalid configuration with the status 2
+([ADR-0008](0008-error-isolation-exit-code.md)).
+
 ## Rationale
 
 - What is checked is what is actually used to access the file system: the path after decoding and resolving,
@@ -41,6 +46,9 @@ removing them, so `onExpires` receives URIs instead of decoded paths.
 - One component instead of scattered `Path.of(root, path)` calls (SRP, DRY): the mapping rules change in one place and
   are covered by one set of tests.
 - `toRealPath` is not used: the file may not exist yet. Symbolic links on removal are a separate task (#6).
+- The check costs one file before the first request: without it a run with a read-only destination crawled all
+  the listings, failed on every file and ended with the status 1 (#59). Creating a file checks what a run does;
+  the permission bits of the folder say nothing about a read-only file system or a volume of another user.
 
 ## Consequences
 
@@ -48,3 +56,5 @@ removing them, so `onExpires` receives URIs instead of decoded paths.
 - Paths in the log are absolute.
 - A resource with an invalid path is neither downloaded nor removed. Restricting the crawl to the start folder and host
   is a separate decision (#5).
+- A destination folder that cannot be written is reported before any request to the site, with the cause,
+  e.g. `Read-only file system` or `AccessDeniedException`.
