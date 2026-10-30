@@ -2,10 +2,7 @@ package com.github.sftwnd.etsiorg;
 
 import edu.umd.cs.findbugs.annotations.NonNull;
 import edu.umd.cs.findbugs.annotations.Nullable;
-import lombok.AccessLevel;
-import lombok.AllArgsConstructor;
 import lombok.Getter;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.net.URI;
@@ -21,7 +18,6 @@ import java.util.stream.IntStream;
  * Global resource reference
  */
 @Slf4j
-@AllArgsConstructor(access = AccessLevel.PRIVATE)
 @Getter
 public class HREF {
 
@@ -40,20 +36,17 @@ public class HREF {
     /**
      * File size description
      */
-    @Setter
-    private Long bytes;
+    private final Long bytes;
 
     /**
      * File creation time description
      */
-    @Setter
-    private LocalDateTime dateTime;
+    private final LocalDateTime dateTime;
 
     /**
      * Has to be the file regular or not
      */
-    @Setter
-    private boolean regularFile;
+    private final boolean regularFile;
 
     /**
      * File path on the site request
@@ -94,10 +87,10 @@ public class HREF {
         this.uri = Objects.requireNonNull(uri, "HREF::new - uri is null");
         this.version = Optional.ofNullable(version).orElseGet(() -> versionOfUri(uri));
         this.regularFile = Optional.ofNullable(regularFile).orElseGet(() -> bytes != null || dateTime != null);
-        this.bytes = this.regularFile == Boolean.TRUE
+        this.bytes = this.regularFile
                 ? Objects.requireNonNull(bytes, "HREF::new - bytes has to be defined for regular file")
                 : bytes;
-        this.dateTime = this.regularFile == Boolean.TRUE
+        this.dateTime = this.regularFile
                 ? Objects.requireNonNull(dateTime, "HREF::new - dateTime has to be defined for regular file")
                 : dateTime;
         if (!this.regularFile) {

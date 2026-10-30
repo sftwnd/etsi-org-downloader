@@ -6,9 +6,12 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.net.URI;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.Random;
 import java.util.stream.IntStream;
 import java.util.stream.LongStream;
@@ -142,6 +145,23 @@ class HREFTest {
     @Test
     void isVersioned() {
         assertTrue(builder(DEFAULT_VERSIONED_NAME).build().isVersioned());
+    }
+
+    @Test
+    void immutableFieldsTest() {
+        Arrays.stream(HREF.class.getDeclaredFields())
+                .filter(field -> !Modifier.isStatic(field.getModifiers()))
+                .forEach(field -> assertTrue(Modifier.isFinal(field.getModifiers()), field.getName() + " is not final"));
+    }
+
+    @Test
+    void noSettersTest() {
+        assertTrue(Arrays.stream(HREF.class.getMethods()).map(Method::getName).noneMatch(name -> name.startsWith("set")));
+    }
+
+    @Test
+    void singleValidatingConstructorTest() {
+        assertEquals(1, HREF.class.getDeclaredConstructors().length);
     }
 
     @Test
