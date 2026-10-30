@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-10-30
+- Amended: 2026-10-30 — the base images are pinned by digest and updated by Dependabot (#68)
 - Russian version: [ADR-0012](ru/0012-continuous-integration.md)
 
 ## Context
@@ -27,6 +28,11 @@ against the API of its own JDK.
 - `pom.xml` sets `maven.compiler.release` 11 instead of `maven.compiler.source` and `target`.
 - The build stage of the image packages the jar without the tests (`-Dmaven.test.skip=true`).
 - A pull request is merged after its checks have passed.
+- The base images of the `Dockerfile` are pinned by the digests of their multi-platform indexes. Dependabot
+  (`.github/dependabot.yml`) proposes the updates of the digests, of the Maven dependencies and plugins and of
+  the GitHub Actions weekly, as pull requests into `develop` that the workflow builds and tests. It does not propose
+  what the project cannot take: another major version of `eclipse-temurin`, JUnit 6 (Java 17) and the plugins 4
+  (Maven 4).
 
 ## Rationale
 
@@ -39,11 +45,15 @@ against the API of its own JDK.
   of the image.
 - The start with an invalid configuration needs no network: the check does not depend on www.etsi.org and puts no load
   on it.
+- A digest makes the build reproducible: the same `Dockerfile` builds from the same base images until a pull request
+  changes them, and every change of a base image is a commit that the workflow has checked.
 
 ## Consequences
 
 - `docker compose up --build` does not run the tests: locally they are run by `./mvnw verify`.
 - Every push runs four builds of the project and one of the image.
+- Dependabot uses its configuration from the default branch, so the updates start when the file reaches `master` with
+  a release; until then the digests are updated by hand.
 - The newer JDKs warn about what they are going to forbid: on JDK 21 and 25 Mockito loads its agent dynamically,
   on JDK 25 Lombok calls `sun.misc.Unsafe`. The warnings do not fail the build; the matrix shows when they become
   errors.

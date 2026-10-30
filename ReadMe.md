@@ -34,7 +34,9 @@ runs the tests and builds:
 
 `./mvnw test` runs the tests only (on the module path); `./mvnw verify` also starts the packaged jars on the module path
 and on the class path. Continuous integration ([build.yml](.github/workflows/build.yml)) runs `./mvnw verify` on JDK 11,
-17, 21 and 25 for every push and pull request and builds the Docker image.
+17, 21 and 25 for every push and pull request and builds the Docker image. The base images of the image are pinned by
+digest; Dependabot proposes their updates, as well as those of the Maven dependencies and plugins and of the GitHub
+Actions.
 
 The Maven Wrapper (`mvnw`, `mvnw.cmd` on Windows) downloads the Maven version of the project once, checks the SHA-256
 of its distribution and runs it. Run it in the project folder: `.mvn/maven.config` applies the project settings
