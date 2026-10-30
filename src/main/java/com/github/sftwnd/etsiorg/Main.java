@@ -10,13 +10,10 @@ import java.nio.file.Path;
 import java.time.DateTimeException;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
-import java.util.Collection;
 import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.Predicate;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 @Slf4j
 public class Main {
@@ -61,19 +58,11 @@ public class Main {
                     Printable.of(linkPolicy.getRoot()), Printable.of(destination.getRoot()), threads, zone);
             var processorFactory = new ComplexProcessorFactory(destination, zone, linkPolicy, executor, new ExpiredRemover(destination));
             linkPolicy.visit(linkPolicy.getRoot());
-            processorFactory
+            Summary summary = processorFactory
                     .processor(Page.of(HREF.builder().uri(linkPolicy.getRoot()).build()))
                     .process()
-                    .thenApply(Stream::sorted)
-                    .thenApply(stream -> stream.map(Path::toString))
-                    .thenApply(Optional::of)
-                    .join()
-                    .map(stream -> stream.collect(Collectors.toList()))
-                    .filter(Predicate.not(Collection::isEmpty))
-                    .ifPresentOrElse(
-                            paths -> logger.info("There are {} files has been loaded", paths.size()),
-                            () -> logger.info("No files were uploaded")
-                    );
+                    .join();
+            logger.info("Files downloaded: {}, up to date: {}", summary.getDownloaded(), summary.getUpToDate());
         } finally {
             executor.shutdown();
         }

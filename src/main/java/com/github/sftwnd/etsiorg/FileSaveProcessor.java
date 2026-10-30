@@ -28,7 +28,6 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.regex.Pattern;
-import java.util.stream.Stream;
 
 import static java.nio.file.StandardOpenOption.CREATE;
 import static java.nio.file.StandardOpenOption.WRITE;
@@ -39,7 +38,7 @@ import static java.nio.file.StandardOpenOption.WRITE;
  */
 @Getter
 @Slf4j
-public class FileSaveProcessor implements Processor<CompletableFuture<Stream<Path>>> {
+public class FileSaveProcessor implements Processor<CompletableFuture<Summary>> {
 
     private static final int BUFFER_SIZE = 64 << 10;
 
@@ -83,36 +82,40 @@ public class FileSaveProcessor implements Processor<CompletableFuture<Stream<Pat
 
     /**
      * Save file and return completion future (in the caller thread)
-     * @return Completed future with list with one path to the loaded file
+     * @return completed future with the summary of the file
      */
     @NonNull
     @Override
-    public CompletableFuture<Stream<Path>> process() {
-        return CompletableFuture.completedFuture(Optional.ofNullable(this.saveFile()).stream());
+    public CompletableFuture<Summary> process() {
+        return CompletableFuture.completedFuture(this.saveFile());
     }
 
     /**
      * Save the file unless the local copy is up to date
-     * @return path to the local copy of the file or null if it cannot be saved
+     * @return summary of the file: downloaded, up to date or empty if it has not been saved
      */
-    private @Nullable Path saveFile() {
+    private @NonNull Summary saveFile() {
         final Path filePath;
         try {
             filePath = this.getDestination().pathOf(this.getPage().getUri());
         } catch (IllegalArgumentException iaex) {
             logger.error("Unable to save file. {}", iaex.getMessage());
-            return null;
+            return Summary.EMPTY;
         }
         try {
             Files.createDirectories(filePath.getParent());
             long contentLength = this.getPage().contentLength();
-            if (!isUpToDate(filePath, contentLength) && download(filePath, contentLength)) {
-                logger.info("File: '{}' has been saved", Printable.of(filePath));
+            if (isUpToDate(filePath, contentLength)) {
+                return Summary.UP_TO_DATE;
             }
-            return filePath;
+            if (download(filePath, contentLength)) {
+                logger.info("File: '{}' has been saved", Printable.of(filePath));
+                return Summary.DOWNLOADED;
+            }
+            return Summary.EMPTY;
         } catch (IOException ioex) {
             logger.error("Unable to save file: '{}'. Cause: {} {}", Printable.of(filePath), ioex.getClass().getSimpleName(), Printable.of(ioex.getMessage()));
-            return null;
+            return Summary.EMPTY;
         }
     }
 

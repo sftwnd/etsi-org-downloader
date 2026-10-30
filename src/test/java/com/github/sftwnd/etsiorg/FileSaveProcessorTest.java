@@ -20,11 +20,9 @@ import java.nio.file.attribute.FileTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.Arrays;
-import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -46,7 +44,7 @@ class FileSaveProcessorTest extends AbstractFileSourceTest {
 
     @Test
     void downloadTest() throws IOException {
-        assertEquals(List.of(this.target), process());
+        assertEquals(Summary.DOWNLOADED, process());
         assertArrayEquals(content(), Files.readAllBytes(this.target));
         assertTrue(Files.notExists(this.part));
     }
@@ -71,7 +69,7 @@ class FileSaveProcessorTest extends AbstractFileSourceTest {
         Files.createDirectories(this.part.getParent());
         Files.write(this.part, Arrays.copyOf(this.buff, offset));
         when(this.page.inputStreamFrom(offset)).thenReturn(new ByteArrayInputStream(this.buff, offset, length() - offset));
-        assertEquals(List.of(this.target), process());
+        assertEquals(Summary.DOWNLOADED, process());
         assertArrayEquals(content(), Files.readAllBytes(this.target));
         assertTrue(Files.notExists(this.part));
     }
@@ -81,7 +79,7 @@ class FileSaveProcessorTest extends AbstractFileSourceTest {
         int offset = length() / 3;
         when(this.page.inputStreamFrom(0L)).thenReturn(new FailingInputStream(this.buff, offset));
         when(this.page.inputStreamFrom(offset)).thenReturn(new ByteArrayInputStream(this.buff, offset, length() - offset));
-        assertEquals(List.of(this.target), process());
+        assertEquals(Summary.DOWNLOADED, process());
         assertArrayEquals(content(), Files.readAllBytes(this.target));
     }
 
@@ -90,7 +88,7 @@ class FileSaveProcessorTest extends AbstractFileSourceTest {
         int offset = length() / 3;
         when(this.page.inputStreamFrom(0L)).thenReturn(new FailingInputStream(this.buff, offset));
         when(this.page.inputStreamFrom(offset)).thenReturn(new ByteArrayInputStream(new byte[0]));
-        assertEquals(List.of(), process());
+        assertEquals(Summary.EMPTY, process());
         assertTrue(Files.notExists(this.target));
         assertArrayEquals(Arrays.copyOf(this.buff, offset), Files.readAllBytes(this.part));
     }
@@ -101,7 +99,7 @@ class FileSaveProcessorTest extends AbstractFileSourceTest {
         Files.createDirectories(this.target.getParent());
         Files.write(this.target, old);
         when(this.page.inputStreamFrom(0L)).thenReturn(new FailingInputStream(this.buff, 0));
-        assertEquals(List.of(), process());
+        assertEquals(Summary.EMPTY, process());
         assertArrayEquals(old, Files.readAllBytes(this.target));
     }
 
@@ -109,7 +107,7 @@ class FileSaveProcessorTest extends AbstractFileSourceTest {
     void fileOfAnotherSizeIsReplacedTest() throws IOException {
         Files.createDirectories(this.target.getParent());
         Files.write(this.target, "old content".getBytes(StandardCharsets.US_ASCII));
-        assertEquals(List.of(this.target), process());
+        assertEquals(Summary.DOWNLOADED, process());
         assertArrayEquals(content(), Files.readAllBytes(this.target));
     }
 
@@ -120,7 +118,7 @@ class FileSaveProcessorTest extends AbstractFileSourceTest {
         Files.write(this.target, local);
         Files.setLastModifiedTime(this.target, FileTime.from(this.dateTime.toInstant(ZoneOffset.UTC)));
         clearInvocations(this.page);
-        assertEquals(List.of(this.target), process());
+        assertEquals(Summary.UP_TO_DATE, process());
         assertArrayEquals(local, Files.readAllBytes(this.target));
         verify(this.page, never()).inputStreamFrom(anyLong());
     }
@@ -130,7 +128,7 @@ class FileSaveProcessorTest extends AbstractFileSourceTest {
         Path stale = this.target.resolveSibling(this.target.getFileName() + ".200001010000" + FileSaveProcessor.PART_SUFFIX);
         Files.createDirectories(stale.getParent());
         Files.write(stale, new byte[length() / 2]);
-        assertEquals(List.of(this.target), process());
+        assertEquals(Summary.DOWNLOADED, process());
         assertArrayEquals(content(), Files.readAllBytes(this.target));
         assertTrue(Files.notExists(stale));
         verify(this.page, never()).inputStreamFrom(length() / 2);
@@ -141,7 +139,7 @@ class FileSaveProcessorTest extends AbstractFileSourceTest {
         Files.createDirectories(this.target.getParent());
         Files.write(this.target, new byte[length()]);
         Files.setLastModifiedTime(this.target, FileTime.from(this.dateTime.minusDays(3).minusMinutes(7).toInstant(ZoneOffset.UTC)));
-        assertEquals(List.of(this.target), process());
+        assertEquals(Summary.DOWNLOADED, process());
         assertArrayEquals(content(), Files.readAllBytes(this.target));
         assertEquals(this.dateTime.toInstant(ZoneOffset.UTC), Files.getLastModifiedTime(this.target).toInstant());
     }
@@ -153,7 +151,7 @@ class FileSaveProcessorTest extends AbstractFileSourceTest {
         Files.write(this.target, local);
         Files.setLastModifiedTime(this.target, FileTime.from(this.dateTime.toInstant(ZoneOffset.ofHours(3))));
         clearInvocations(this.page);
-        assertEquals(List.of(this.target), process());
+        assertEquals(Summary.UP_TO_DATE, process());
         assertArrayEquals(local, Files.readAllBytes(this.target));
         assertEquals(this.dateTime.toInstant(ZoneOffset.UTC), Files.getLastModifiedTime(this.target).toInstant());
         verify(this.page, never()).inputStreamFrom(anyLong());
@@ -162,7 +160,7 @@ class FileSaveProcessorTest extends AbstractFileSourceTest {
     @Test
     void remoteLengthMismatchTest() throws IOException {
         doReturn(this.bytes, this.bytes + 1).when(this.page).contentLength();
-        assertEquals(List.of(), process());
+        assertEquals(Summary.EMPTY, process());
         assertTrue(Files.notExists(this.target));
         assertTrue(Files.notExists(this.part));
     }
@@ -170,7 +168,7 @@ class FileSaveProcessorTest extends AbstractFileSourceTest {
     @Test
     void readIsBoundedByLengthTest() throws IOException {
         when(this.page.inputStreamFrom(0L)).thenReturn(new ByteArrayInputStream(this.buff));
-        assertEquals(List.of(this.target), process());
+        assertEquals(Summary.DOWNLOADED, process());
         assertArrayEquals(content(), Files.readAllBytes(this.target));
     }
 
@@ -181,7 +179,7 @@ class FileSaveProcessorTest extends AbstractFileSourceTest {
         Files.write(this.part, partial);
         clearInvocations(this.page);
         try (FileChannel channel = FileChannel.open(this.part, StandardOpenOption.WRITE); FileLock ignored = channel.lock()) {
-            assertEquals(List.of(this.target), process());
+            assertEquals(Summary.EMPTY, process());
         }
         assertTrue(Files.notExists(this.target));
         assertArrayEquals(partial, Files.readAllBytes(this.part));
@@ -204,13 +202,13 @@ class FileSaveProcessorTest extends AbstractFileSourceTest {
                 return super.read(target, offset, length);
             }
         });
-        CompletableFuture<List<Path>> first = CompletableFuture.supplyAsync(this::process);
+        CompletableFuture<Summary> first = CompletableFuture.supplyAsync(this::process);
         assertTrue(started.await(10, TimeUnit.SECONDS));
         Page second = spy(Page.of(this.href));
-        new FileSaveProcessor(new Destination(root()), ZoneOffset.UTC, second).process().join();
+        assertEquals(Summary.EMPTY, new FileSaveProcessor(new Destination(root()), ZoneOffset.UTC, second).process().join());
         verify(second, never()).inputStreamFrom(anyLong());
         release.countDown();
-        assertEquals(List.of(this.target), first.get(10, TimeUnit.SECONDS));
+        assertEquals(Summary.DOWNLOADED, first.get(10, TimeUnit.SECONDS));
         assertArrayEquals(content(), Files.readAllBytes(this.target));
         assertTrue(Files.notExists(this.part));
     }
@@ -219,7 +217,7 @@ class FileSaveProcessorTest extends AbstractFileSourceTest {
     void longerPartIsDiscardedTest() throws IOException {
         Files.createDirectories(this.part.getParent());
         Files.write(this.part, new byte[length() + 1]);
-        assertEquals(List.of(this.target), process());
+        assertEquals(Summary.DOWNLOADED, process());
         assertArrayEquals(content(), Files.readAllBytes(this.target));
     }
 
@@ -227,7 +225,7 @@ class FileSaveProcessorTest extends AbstractFileSourceTest {
     void directoryIsNotReplacedTest() throws IOException {
         Path file = Files.createDirectories(this.target).resolve("file.txt");
         Files.writeString(file, "keep me");
-        assertEquals(List.of(), process());
+        assertEquals(Summary.EMPTY, process());
         assertTrue(Files.isDirectory(this.target));
         assertTrue(Files.exists(file));
     }
@@ -235,7 +233,7 @@ class FileSaveProcessorTest extends AbstractFileSourceTest {
     @Test
     void outsideDestinationTest() {
         when(this.href.getUri()).thenReturn(URI.create("http://localhost/../outside.pdf"));
-        assertEquals(List.of(), process());
+        assertEquals(Summary.EMPTY, process());
         assertTrue(Files.notExists(this.tempDir.resolve("outside.pdf")));
     }
 
@@ -254,8 +252,8 @@ class FileSaveProcessorTest extends AbstractFileSourceTest {
         return Path.of("/" + FILE);
     }
 
-    private List<Path> process() {
-        return this.processor.process().join().collect(Collectors.toList());
+    private Summary process() {
+        return this.processor.process().join();
     }
 
     private int length() {

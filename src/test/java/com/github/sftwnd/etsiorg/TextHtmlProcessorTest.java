@@ -5,9 +5,6 @@ import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import edu.umd.cs.findbugs.annotations.NonNull;
-import lombok.AccessLevel;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
@@ -66,7 +63,7 @@ class TextHtmlProcessorTest extends AbstractFileSourceTest {
                 NullPointerException.class,
                 () -> new TextHtmlProcessor(
                         mock(Page.class),
-                        this.<ProcessorFactory<CompletableFuture<Stream<Path>>>>nullRef().get(),
+                        this.<ProcessorFactory<CompletableFuture<Summary>>>nullRef().get(),
                         LINK_POLICY,
                         mock(Executor.class),
                         mock(Consumer.class)));
@@ -146,14 +143,14 @@ class TextHtmlProcessorTest extends AbstractFileSourceTest {
         startUp("files");
         when(this.href.getBytes()).thenReturn(this.bytes + 10);
         var completableFuture = assertDoesNotThrow(() -> this.textHtmlProcessor(this.page).process());
-        assertEquals(List.of(), assertDoesNotThrow(completableFuture::join).collect(Collectors.toList()));
+        assertEquals(Summary.EMPTY, assertDoesNotThrow(completableFuture::join));
     }
 
     @Test
     void processRealListingTest() throws IOException {
         startUp("etsi-129078");
         Path actual = Path.of("/deliver/etsi_ts/129000_129099/129078/19.00.00_60");
-        assertEquals(List.of(actual), this.textHtmlProcessor(this.page).process().join().collect(Collectors.toList()));
+        assertEquals(List.of(actual), processPaths());
         assertEquals(61, this.excluded.size());
         assertFalse(this.excluded.contains(actual));
     }
@@ -162,14 +159,14 @@ class TextHtmlProcessorTest extends AbstractFileSourceTest {
     void processChunkedListingTest() throws IOException {
         startUp("files");
         doReturn(-1L).when(this.page).contentLength();
-        assertEquals(FILES_PATHS, this.textHtmlProcessor(this.page).process().join().collect(Collectors.toList()));
+        assertEquals(FILES_PATHS, processPaths());
     }
 
     @Test
     void processTooLargeDeclaredListingTest() throws IOException {
         startUp("files");
         doReturn(TextHtmlProcessor.MAX_LISTING_SIZE + 1L).when(this.page).contentLength();
-        assertEquals(List.of(), this.textHtmlProcessor(this.page).process().join().collect(Collectors.toList()));
+        assertEquals(List.of(), processPaths());
     }
 
     @Test
@@ -182,7 +179,7 @@ class TextHtmlProcessorTest extends AbstractFileSourceTest {
                 return 'x';
             }
         });
-        assertEquals(List.of(), this.textHtmlProcessor(this.page).process().join().collect(Collectors.toList()));
+        assertEquals(List.of(), processPaths());
     }
 
     @Test
@@ -192,7 +189,7 @@ class TextHtmlProcessorTest extends AbstractFileSourceTest {
         doReturn((long) line.length).when(this.page).contentLength();
         when(this.page.inputStream()).thenReturn(new ByteArrayInputStream(line));
         var result = assertTimeoutPreemptively(Duration.ofSeconds(5), () -> this.textHtmlProcessor(this.page).process().join());
-        assertEquals(List.of(), result.collect(Collectors.toList()));
+        assertEquals(Summary.EMPTY, result);
     }
 
     @Test
@@ -222,16 +219,31 @@ class TextHtmlProcessorTest extends AbstractFileSourceTest {
         startUp(name);
         var completableFuture = assertDoesNotThrow(() -> this.textHtmlProcessor(this.page).process());
         assertNotNull(completableFuture);
-        var pathsStream = assertDoesNotThrow(completableFuture::join);
-        assertEquals(this.paths, pathsStream.collect(Collectors.toList()));
+        Summary summary = assertDoesNotThrow(completableFuture::join);
+        assertEquals(this.paths, processedPaths());
+        assertEquals(this.paths.size(), summary.getDownloaded());
         assertEquals(this.excludes, this.excluded);
+    }
+
+    /**
+     * Process the page and collect the paths of the processed children; every child is reported as downloaded
+     */
+    private List<Path> processPaths() {
+        Summary summary = this.textHtmlProcessor(this.page).process().join();
+        List<Path> paths = processedPaths();
+        assertEquals(paths.size(), summary.getDownloaded());
+        return paths;
+    }
+
+    private List<Path> processedPaths() {
+        return ((FooProcessorFactory) this.processorFactory).processed.stream().map(HREF::path).collect(Collectors.toList());
     }
 
     private <T> Supplier<T> nullRef() {
         return () -> null;
     }
 
-    private ProcessorFactory<CompletableFuture<Stream<Path>>> processorFactory;
+    private ProcessorFactory<CompletableFuture<Summary>> processorFactory;
     private Consumer<Collection<URI>> onExpires;
     private Collection<Path> paths;
     private Collection<Path> excludes;
@@ -268,30 +280,17 @@ class TextHtmlProcessorTest extends AbstractFileSourceTest {
         }
     }
 
-    static class FooProcessorFactory implements ProcessorFactory<CompletableFuture<Stream<Path>>> {
+    static class FooProcessorFactory implements ProcessorFactory<CompletableFuture<Summary>> {
 
         final List<HREF> processed = Collections.synchronizedList(new ArrayList<>());
         final List<String> threads = Collections.synchronizedList(new ArrayList<>());
 
         @NonNull
         @Override
-        public Processor<CompletableFuture<Stream<Path>>> processor(@NonNull Page page) {
+        public Processor<CompletableFuture<Summary>> processor(@NonNull Page page) {
             processed.add(page.getHref());
             threads.add(Thread.currentThread().getName());
-            return new FooProcessor(page.path());
-        }
-    }
-
-    @AllArgsConstructor
-    static class FooProcessor implements Processor<CompletableFuture<Stream<Path>>> {
-
-        @Getter(value = AccessLevel.PRIVATE)
-        private final Path path;
-
-        @NonNull
-        @Override
-        public CompletableFuture<Stream<Path>> process() {
-            return CompletableFuture.completedFuture(Stream.of(this.getPath()));
+            return () -> CompletableFuture.completedFuture(Summary.DOWNLOADED);
         }
     }
 

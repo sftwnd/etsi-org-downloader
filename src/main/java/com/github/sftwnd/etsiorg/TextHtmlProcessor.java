@@ -9,7 +9,6 @@ import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
-import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.Collection;
@@ -34,10 +33,10 @@ import static java.util.regex.Pattern.CASE_INSENSITIVE;
  */
 @Getter
 @Slf4j
-public class TextHtmlProcessor implements Processor<CompletableFuture<Stream<Path>>> {
+public class TextHtmlProcessor implements Processor<CompletableFuture<Summary>> {
 
     private final Page page;
-    private final ProcessorFactory<CompletableFuture<Stream<Path>>> processorFactory;
+    private final ProcessorFactory<CompletableFuture<Summary>> processorFactory;
     private final LinkPolicy linkPolicy;
     private final Executor executor;
     private final Consumer<Collection<URI>> onExpires;
@@ -51,7 +50,7 @@ public class TextHtmlProcessor implements Processor<CompletableFuture<Stream<Pat
      * @param onExpires listener for the expired resources
      */
     TextHtmlProcessor(@NonNull Page page,
-                      @NonNull ProcessorFactory<CompletableFuture<Stream<Path>>> processorFactory,
+                      @NonNull ProcessorFactory<CompletableFuture<Summary>> processorFactory,
                       @NonNull LinkPolicy linkPolicy,
                       @NonNull Executor executor,
                       @Nullable Consumer<Collection<URI>> onExpires) {
@@ -64,14 +63,14 @@ public class TextHtmlProcessor implements Processor<CompletableFuture<Stream<Pat
 
     /**
      * Process file with content or references recursively to load the tree of files
-     * @return Stream of loaded file paths
+     * @return summary of the tree of files
      */
     @Override
-    public @NonNull CompletableFuture<Stream<Path>> process() {
+    public @NonNull CompletableFuture<Summary> process() {
         final Page page = this.getPage();
         logger.debug("Start text/html process: '{}'", Printable.of(page.path()));
         try {
-            var result = swap(
+            var result = sum(
                     parseFile(page)
                             .map(href -> CompletableFuture
                                     .supplyAsync(() -> this.getProcessorFactory().processor(Page.of(href)).process(), this.getExecutor())
@@ -80,22 +79,20 @@ public class TextHtmlProcessor implements Processor<CompletableFuture<Stream<Pat
             return result;
         } catch (IOException ioex) {
             logger.error("Unable to process text/html page: '{}'. Cause[{}]: {}", Printable.of(page.path()), ioex.getClass().getSimpleName(), Printable.of(ioex.getMessage()));
-            return CompletableFuture.completedFuture(Stream.empty());
+            return CompletableFuture.completedFuture(Summary.EMPTY);
         }
     }
 
     /**
-     * Swap Stream of CompletableFuture of Stream to CompletableFuture of Stream
-     * @param futureCollection Collection of CompletableFuture of Collection
-     * @return CompletableFuture of Stream
-     * @param <X> type of collection element
+     * Sum of the summaries of the children
+     * @param children summaries of the children
+     * @return future of the sum that is completed when all the children are completed
      */
-    private <X> CompletableFuture<Stream<X>> swap(
-            @NonNull Stream<CompletableFuture<Stream<X>>> futureCollection
-    ) {
-        @SuppressWarnings("unchecked")
-        CompletableFuture<Stream<X>>[] futures = (CompletableFuture<Stream<X>>[])futureCollection.toArray(size -> new CompletableFuture<?>[size]);
-        return CompletableFuture.allOf(futures).thenApply(ignore -> Arrays.stream(futures).flatMap(CompletableFuture::join));
+    private static @NonNull CompletableFuture<Summary> sum(@NonNull Stream<CompletableFuture<Summary>> children) {
+        CompletableFuture<?>[] futures = children.toArray(CompletableFuture<?>[]::new);
+        return CompletableFuture.allOf(futures).thenApply(ignore -> Arrays.stream(futures)
+                .map(future -> (Summary) future.join())
+                .reduce(Summary.EMPTY, Summary::plus));
     }
 
     /*
