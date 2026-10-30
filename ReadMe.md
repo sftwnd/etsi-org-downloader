@@ -13,6 +13,12 @@ The options are passed to the JVM, e.g. another site folder and destination:
 ./run.sh -Duri=https://www.etsi.org/deliver/etsi_ts/ -Ddest=/data/etsi
 ```
 
+| Property   | Default                         | Meaning                                                              |
+|------------|---------------------------------|----------------------------------------------------------------------|
+| `-Duri`    | `https://www.etsi.org/deliver/` | Site folder to mirror; only links inside it are followed             |
+| `-Ddest`   | `.`                             | Destination folder; files are stored under their path on the site    |
+| `-Dthreads`| number of processors            | Threads that process listings and files, i.e. simultaneous requests  |
+
 ## Remove Docker image
 
 ```console

@@ -32,7 +32,10 @@ import java.util.regex.Pattern;
 @Slf4j
 public class Page {
 
-    private static final String USER_AGENT = "Mozilla/5.0";
+    /**
+     * User agent of the requests: the name of the tool and where to find it
+     */
+    static final String USER_AGENT = "etsiorg-downloader (+https://github.com/sftwnd/etsi-org-downloader)";
 
     /**
      * Charset parameter of the Content-Type header
