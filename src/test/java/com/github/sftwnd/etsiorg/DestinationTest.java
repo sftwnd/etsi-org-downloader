@@ -98,6 +98,23 @@ class DestinationTest {
     }
 
     @Test
+    void lockFileTest() {
+        assertEquals(this.root.resolve(".etsiorg-downloader.lock"), this.destination.getLockFile());
+        assertEquals(this.root.resolve(Path.of("deliver", ".etsiorg-downloader.lock")),
+                this.destination.pathOf(URI.create("https://www.etsi.org/deliver/.etsiorg-downloader.lock")));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "https://www.etsi.org/.etsiorg-downloader.lock",
+            "https://www.etsi.org/.ETSIORG-Downloader.LOCK",
+            "https://www.etsi.org/%2Eetsiorg-downloader.lock"
+    })
+    void lockFileIsReservedTest(String uri) {
+        assertThrows(IllegalArgumentException.class, () -> this.destination.pathOf(URI.create(uri)));
+    }
+
+    @Test
     void prepareCreatesFolderTest(@TempDir Path tempDir) throws IOException {
         Path root = tempDir.resolve("mirror").resolve("etsi");
         new Destination(root).prepare();

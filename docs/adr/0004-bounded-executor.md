@@ -2,8 +2,8 @@
 
 - Status: Accepted
 - Date: 2026-10-30
-- Amended: 2026-10-30 — 4 threads by default instead of the number of processors (#57); `Settings` in the component
-  diagram (#61)
+- Amended: 2026-10-30 — 4 threads by default instead of the number of processors (#57); `Settings` and `RunLock`
+  in the component diagram (#61, #62)
 - Russian version: [ADR-0004](ru/0004-bounded-executor.md)
 
 ## Context
@@ -68,10 +68,12 @@ C4Component
         Component(page, "Page", "Java", "HTTP: timeouts, retries, Range")
         Component(dest, "Destination", "Java", "URI to a path inside the destination folder")
         Component(remover, "ExpiredRemover", "Java", "Removal of expired versions")
+        Component(lock, "RunLock", "Java", "One run at a time per destination folder")
     }
     ContainerDb(fs, "Destination folder", "File system", "Mirror deliver/...")
     Rel(user, main, "Starts")
     Rel(main, settings, "Settings of the run")
+    Rel(main, lock, "Holds while the run lasts")
     Rel(main, factory, "Root of the crawl")
     Rel(factory, html, "Folder")
     Rel(factory, file, "File")
@@ -85,4 +87,5 @@ C4Component
     Rel(remover, dest, "Version path")
     Rel(file, fs, "Writes")
     Rel(remover, fs, "Removes")
+    Rel(lock, fs, "Locks .etsiorg-downloader.lock")
 ```

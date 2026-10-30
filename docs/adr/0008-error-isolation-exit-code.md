@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-10-30
+- Amended: 2026-10-30 — the exit status 3 of a run stopped by another run (#62)
 - Russian version: [ADR-0008](ru/0008-error-isolation-exit-code.md)
 
 ## Context
@@ -21,7 +22,8 @@ Errors that were only written to the log gave exit status 0, so cron or CI did n
   the log and `Summary.FAILED` of that resource.
 - A failure to fetch or parse a listing as a whole is `Summary.FAILED` of the folder.
 - `Main.run()` returns the exit status, and `main` passes it to `System.exit`:
-  `0` — no failures, `1` — some resources have not been processed, `2` — invalid configuration.
+  `0` — no failures, `1` — some resources have not been processed, `2` — invalid configuration,
+  `3` — another run mirrors to the destination folder ([ADR-0014](0014-run-lock.md)).
 
 ## Rationale
 

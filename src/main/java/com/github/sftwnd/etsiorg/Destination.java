@@ -17,6 +17,11 @@ import java.util.Objects;
 public class Destination {
 
     /**
+     * Name of the lock file of a run in the destination folder
+     */
+    static final String LOCK_FILE_NAME = ".etsiorg-downloader.lock";
+
+    /**
      * Absolute normalized path of the destination folder
      */
     private final Path root;
@@ -39,10 +44,20 @@ public class Destination {
     }
 
     /**
+     * Lock file of a run: one run at a time mirrors to the destination folder, and no resource of the site is mapped
+     * to this file
+     * @return path of the lock file in the destination folder
+     */
+    public @NonNull Path getLockFile() {
+        return this.root.resolve(LOCK_FILE_NAME);
+    }
+
+    /**
      * Local path of the site resource: the segments of the resource path are resolved against the destination folder
      * @param uri resource uri
      * @return local path inside the destination folder
-     * @throws IllegalArgumentException if the resource path is unsafe or leads outside the destination folder
+     * @throws IllegalArgumentException if the resource path is unsafe, leads outside the destination folder
+     *                                  or to the lock file
      */
     public @NonNull Path pathOf(@NonNull URI uri) {
         Path path = this.root;
@@ -51,6 +66,10 @@ public class Destination {
         }
         if (!path.normalize().startsWith(this.root)) {
             throw new IllegalArgumentException("Resource path leads outside the destination folder: " + Printable.of(uri));
+        }
+        // the file system may ignore the case of the names
+        if (this.root.equals(path.getParent()) && LOCK_FILE_NAME.equalsIgnoreCase(String.valueOf(path.getFileName()))) {
+            throw new IllegalArgumentException("Resource path leads to the lock file: " + Printable.of(uri));
         }
         return path;
     }
