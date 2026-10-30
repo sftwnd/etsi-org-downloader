@@ -3,6 +3,8 @@ target/
 !**/src/main/**/target/
 !**/src/test/**/target/
 /deliver
+/mirror
+/.env
 
 ### IntelliJ IDEA ###
 .idea/modules.xml

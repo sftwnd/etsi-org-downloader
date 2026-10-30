@@ -18,4 +18,5 @@ services:
         max-size: 10m
         max-file: "5"
     volumes:
-      - ./deliver:/data/deliver
+      # the whole destination folder of the image (-Ddest=/data): ./mirror or the host folder ETSIORG_MIRROR names
+      - ${ETSIORG_MIRROR:-./mirror}:/data
