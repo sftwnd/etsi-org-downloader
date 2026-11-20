@@ -4,7 +4,7 @@
 # unzip is required: without it mvnw takes the tar.gz distribution, which does not match the checksum.
 # The jar is packaged without the tests: they run in continuous integration (.github/workflows/build.yml).
 # The base images are pinned by the digests of their multi-platform indexes; Dependabot updates them
-FROM eclipse-temurin:11-jdk@sha256:810d03ef723872693a38e5c1367cc88a0bee58edcf06a2ab868ccc048888db73 AS build
+FROM eclipse-temurin:11-jdk@sha256:9d369f804a33762f34b24cd9d1b9722fd810c16001da58bd63d0919f19a712c3 AS build
 RUN apt-get update \
  && apt-get install -y --no-install-recommends unzip \
  && rm -rf /var/lib/apt/lists/*
