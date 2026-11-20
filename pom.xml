@@ -40,7 +40,7 @@
         <test.run.addReads>${javaModuleName}=jdk.httpserver,ch.qos.logback.classic,ch.qos.logback.core</test.run.addReads>
         <!-- the latest releases that support Java 11: no alpha and beta versions, no 4.0.0 plugins (they require Maven 4) -->
         <!-- logback 1.6 is built for Java 11 -->
-        <logback.version>1.6.6</logback.version>
+        <logback.version>1.6.7</logback.version>
         <lombok.version>1.18.48</lombok.version>
         <slf4j.version>2.0.20</slf4j.version>
         <spotbugs-annotations.version>4.10.5</spotbugs-annotations.version>
